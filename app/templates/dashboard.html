@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | Seed Regulation Monitor{% endblock %}
+{% block content %}
+<section class="hero-card">
+  <div>
+    <p class="eyebrow">Daily Compliance Watch</p>
+    <h2>종자 산업 관련 규제 변화와 조치 현황을 한 화면에서 확인합니다.</h2>
+    {% if latest_sync %}
+    <p class="muted">최근 동기화: {{ latest_sync.finished_at or latest_sync.started_at }} / 상태: {{ latest_sync.status }}</p>
+    {% else %}
+    <p class="muted">아직 동기화 이력이 없습니다. 우측 상단에서 수동 동기화를 실행할 수 있습니다.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="stats-grid stats-grid-four">
+  <article class="stat-card stat-card-chart">
+    <div class="stat-head">
+      <span>중요도 분포</span>
+    </div>
+    <div class="chart-shell">
+      <canvas id="severityChart" height="160"></canvas>
+    </div>
+  </article>
+
+  <article class="stat-card">
+    <span>오늘 신규 건수</span>
+    <strong>{{ stats.today_new_count }}</strong>
+  </article>
+
+  <article class="stat-card">
+    <span>미검토 건수</span>
+    <strong>{{ stats.unreviewed_count }}</strong>
+  </article>
+
+  <article class="stat-card">
+    <span>시행일 임박 건수</span>
+    <strong>{{ stats.imminent_count }}</strong>
+  </article>
+</section>
+
+<section class="content-grid">
+  <article class="panel wide">
+    <div class="panel-head">
+      <h3>최근 등록 목록</h3>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>제목</th>
+            <th>기관</th>
+            <th>시행일</th>
+            <th>중요도</th>
+            <th>조치여부</th>
+            <th>카테고리</th>
+            <th>부서</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in recent_regulations %}
+          {% set action_class = "done" if item.action_status == "조치완료" else "progress" if item.action_status == "조치중" else "needed" if item.action_status == "조치필요" else "na" if item.action_status == "해당없음" else "unknown" %}
+          <tr>
+            <td><a href="/regulations/{{ item.id }}">{{ item.title }}</a></td>
+            <td>{{ item.authority }}</td>
+            <td>{{ item.effective_date or "-" }}</td>
+            <td><span class="badge severity-{{ item.severity }}">{{ item.severity }}</span></td>
+            <td><span class="action-badge action-{{ action_class }}">{{ item.action_status }}</span></td>
+            <td>{{ item.category|join(", ") }}</td>
+            <td>{{ item.department|join(", ") }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="empty-row">등록된 규제가 없습니다.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<script>
+  const chartData = {{ severity_distribution|tojson }};
+  const ctx = document.getElementById("severityChart");
+  new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: chartData.map((item) => item.label),
+      datasets: [{
+        data: chartData.map((item) => item.value),
+        backgroundColor: ["#006f36", "#00984b", "#42b772", "#b8dec8"],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      cutout: "64%",
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            boxWidth: 10,
+            color: "#22543d",
+            padding: 14
+          }
+        }
+      }
+    }
+  });
+</script>
+{% endblock %}

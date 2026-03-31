@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "timezone": "Asia/Seoul",
+  "rules": [
+    {
+      "name": "default_legal_alert",
+      "enabled": true,
+      "severity": ["긴급", "중요"],
+      "recipients": [
+        "legal-team@example.com"
+      ]
+    }
+  ]
+}

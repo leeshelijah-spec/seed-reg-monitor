@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.codex-uvicorn-*.log
+*.log
+config/alert-recipients.json
+data/*.db
+data/outbox/
+*.sqlite3
+Thumbs.db

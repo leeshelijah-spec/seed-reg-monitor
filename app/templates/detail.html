@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ regulation.title }} | Seed Regulation Monitor{% endblock %}
+{% block content %}
+{% set amendment_reason = regulation.amendment_reason or "-" %}
+{% set has_long_amendment_reason = amendment_reason != "-" and amendment_reason|length > 400 %}
+{% set amendment_preview = amendment_reason[:400] ~ "..." if has_long_amendment_reason else amendment_reason %}
+{% set current_action_status = review_log.status if review_log else "미확인" %}
+{% set current_action_note = review_log.comment if review_log and review_log.comment else "" %}
+<article class="detail-card">
+  <p class="eyebrow">{{ regulation.type }}</p>
+  <h2>{{ regulation.title }}</h2>
+  <p class="muted">
+    <a href="{{ regulation.source_url }}" target="_blank" rel="noreferrer">원문 링크 열기</a>
+  </p>
+
+  <div class="detail-grid">
+    <section class="panel">
+      <h3>기본 정보</h3>
+      <div class="basic-info-columns">
+        <section class="info-cluster">
+          <p class="cluster-label">일정</p>
+          <dl class="info-list compact-info-list">
+            <div class="inline-info-row">
+              <dt>기관</dt>
+              <dd>{{ regulation.authority }}</dd>
+            </div>
+            <div class="inline-info-row">
+              <dt>공포일</dt>
+              <dd>{{ regulation.publication_date or "-" }}</dd>
+            </div>
+            <div class="inline-info-row">
+              <dt>시행일</dt>
+              <dd>{{ regulation.effective_date or "-" }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="info-cluster">
+          <p class="cluster-label">분류</p>
+          <dl class="info-list compact-info-list">
+            <div class="inline-info-row">
+              <dt>중요도</dt>
+              <dd><span class="badge severity-{{ regulation.severity }}">{{ regulation.severity }}</span></dd>
+            </div>
+            <div class="inline-info-row">
+              <dt>카테고리</dt>
+              <dd>{{ regulation.category|join(", ") }}</dd>
+            </div>
+            <div class="inline-info-row">
+              <dt>부서</dt>
+              <dd>{{ regulation.department|join(", ") }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="info-cluster reason-cluster">
+          <p class="cluster-label">제개정 이유</p>
+          <div class="expandable-text">
+            <p class="detail-text" data-preview>{{ amendment_preview }}</p>
+            {% if has_long_amendment_reason %}
+            <p class="detail-text hidden" data-full>{{ amendment_reason }}</p>
+            <button type="button" class="text-toggle" data-toggle aria-expanded="false">전체보기</button>
+            {% endif %}
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>판단 근거</h3>
+      <dl class="info-list">
+        <div>
+          <dt>관련성 사유</dt>
+          <dd class="detail-text">{{ regulation.relevance_reason }}</dd>
+        </div>
+        <div>
+          <dt>중요도 사유</dt>
+          <dd class="detail-text">{{ regulation.severity_reason }}</dd>
+        </div>
+      </dl>
+
+      <form action="/regulations/{{ regulation.id }}/review" method="post" class="review-form">
+        <div class="field-group">
+          <label class="field-label" for="action_status">조치 여부</label>
+          <select id="action_status" name="action_status" class="form-control">
+            {% for option in action_status_options %}
+            <option value="{{ option }}" {% if option == current_action_status %}selected{% endif %}>{{ option }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label" for="action_note">조치 메모</label>
+          <textarea id="action_note" name="action_note" rows="5" class="form-control" placeholder="검토 결과나 후속 조치를 남겨둘 수 있습니다.">{{ current_action_note }}</textarea>
+        </div>
+
+        <div class="review-form-footer">
+          <p class="muted">
+            {% if review_log %}
+            최근 저장: {{ review_log.updated_at }}
+            {% else %}
+            아직 저장된 조치 여부가 없습니다.
+            {% endif %}
+          </p>
+          <button class="sync-button" type="submit">저장</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</article>
+
+<script>
+  document.querySelectorAll("[data-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const container = button.closest(".expandable-text");
+      const preview = container.querySelector("[data-preview]");
+      const full = container.querySelector("[data-full]");
+      const expanded = button.getAttribute("aria-expanded") === "true";
+
+      preview.classList.toggle("hidden", !expanded);
+      full.classList.toggle("hidden", expanded);
+      button.setAttribute("aria-expanded", expanded ? "false" : "true");
+      button.textContent = expanded ? "전체보기" : "접기";
+    });
+  });
+</script>
+{% endblock %}
