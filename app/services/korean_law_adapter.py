@@ -245,15 +245,20 @@ class KoreanLawAdapter:
 
     def _extract_law_amendment_reason(self, law_json: dict[str, Any]) -> str:
         law = law_json.get("법령", law_json)
-        reason_block = law.get("제개정이유")
+        reason_block = law.get("제개정이유") or law.get("개정문")
         if reason_block:
-            flattened = self._flatten_text_parts(reason_block)
+            reason_content = (
+                reason_block.get("제개정이유내용")
+                or reason_block.get("개정문내용")
+                or reason_block
+            )
+            flattened = self._flatten_text_parts(reason_content)
             if flattened:
                 return flattened
 
         matches = self._collect_values_for_keys(
             law,
-            {"제개정이유", "개정이유", "이유"},
+            {"제개정이유", "개정이유", "이유", "개정문"},
         )
         if matches:
             return "\n".join(matches)
