@@ -7,7 +7,6 @@ Seed Regulation Monitor is a FastAPI-based dashboard for collecting, classifying
 ## Author
 
 - Lee, Seunghwan
-- [leesh.elijah@gmail.com](mailto:leesh.elijah@gmail.com)
 
 ## Features
 
