@@ -4,6 +4,11 @@
 
 Seed Regulation Monitor는 종자 산업 관련 규제 변화를 수집하고, 분류하고, 검토할 수 있도록 만든 FastAPI 기반 대시보드 프로젝트입니다.
 
+## 제작자
+
+- Lee, Seunghwan
+- [leesh.elijah@gmail.com](mailto:leesh.elijah@gmail.com)
+
 ## 주요 기능
 
 - 공포 법령 및 행정규칙 수집

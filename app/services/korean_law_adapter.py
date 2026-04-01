@@ -13,26 +13,61 @@ from ..config import settings
 
 
 LAW_BASE_URL = "https://www.law.go.kr"
-SEED_KEYWORDS = [
+SEARCH_KEYWORDS = [
     "종자",
+    "종묘",
+    "육묘",
+    "육종",
     "품종보호",
+    "식물신품종",
     "식물방역",
     "식물검역",
+    "병해충",
     "종자검사",
     "종자검정",
     "종자가격표시",
     "무병화",
     "농수산물 품질관리",
+    "농약",
+    "비료",
+    "유전자변형생물체",
+    "LMO",
+    "농업생명자원",
+]
+LEGISLATIVE_NOTICE_KEYWORDS = [
+    "종자",
+    "종묘",
+    "육종",
+    "품종보호",
+    "식물검역",
+    "농수산물 품질관리",
+    "농약",
+    "비료",
+    "유전자변형생물체",
+    "농업생명자원",
 ]
 
 SECTOR_LAW_HINTS = [
     "종자",
+    "종묘",
+    "육묘",
+    "육종",
+    "채종",
     "품종",
+    "품종보호",
+    "식물신품종",
     "식물방역",
     "검역",
+    "병해충",
     "식물검역",
     "농수산물 품질관리",
     "농약관리",
+    "비료",
+    "유전자변형생물체",
+    "LMO",
+    "생명자원",
+    "무병화",
+    "재배환경",
 ]
 TRACKED_GENERAL_LAWS = {
     "개인정보 보호법",
@@ -44,10 +79,35 @@ TRACKED_GENERAL_LAWS = {
     "독점규제 및 공정거래에 관한 법률 시행령",
     "약관의 규제에 관한 법률",
     "전자상거래 등에서의 소비자보호에 관한 법률",
+    "부정경쟁방지 및 영업비밀보호에 관한 법률",
+    "부정경쟁방지 및 영업비밀보호에 관한 법률 시행령",
+    "유전자변형생물체의 국가간 이동 등에 관한 법률",
+    "유전자변형생물체의 국가간 이동 등에 관한 법률 시행령",
+    "생물다양성 보전 및 이용에 관한 법률",
 }
-LAW_TITLE_EXCLUSIONS = ["직제", "정원", "인사", "관인", "공무원", "수당", "청사", "행정기구"]
-GENERIC_ADMIN_RULE_TERMS = ["기본운영규정", "운영규정", "관리규정", "운영세칙", "공무직근로자", "출장"]
-CORE_ADMIN_RULE_TERMS = ["검사", "검정", "표시", "검역", "인증", "품질", "보호", "수입", "판매", "신고"]
+LAW_TITLE_EXCLUSIONS = ["직제", "정원", "인사", "관인", "공무원", "수당", "청사", "행정기구", "출장", "사무처리"]
+GENERIC_ADMIN_RULE_TERMS = ["기본운영규정", "운영규정", "관리규정", "운영세칙", "공무직근로자", "출장", "사무처리", "회계"]
+CORE_ADMIN_RULE_TERMS = [
+    "검사",
+    "검정",
+    "표시",
+    "검역",
+    "인증",
+    "품질",
+    "보호",
+    "수입",
+    "판매",
+    "신고",
+    "허가",
+    "등록",
+    "회수",
+    "폐기",
+    "농약",
+    "비료",
+    "유전자변형",
+    "LMO",
+    "lmo",
+]
 
 
 class KoreanLawAdapter:
@@ -118,7 +178,7 @@ class KoreanLawAdapter:
         results: list[dict[str, Any]] = []
         seen_seq: set[str] = set()
 
-        for keyword in SEED_KEYWORDS:
+        for keyword in SEARCH_KEYWORDS:
             payload = self._run_fetcher("search_admin_rule", {"query": keyword, "display": 30})
             root = ET.fromstring(payload["raw"])
             for node in root.findall("admrul"):
@@ -164,7 +224,7 @@ class KoreanLawAdapter:
         except ImportError:
             return results
 
-        for keyword in SEED_KEYWORDS[:5]:
+        for keyword in LEGISLATIVE_NOTICE_KEYWORDS:
             response = requests.get(search_url.format(query=f"{keyword} 입법예고"), timeout=20)
             html = response.text
             for match in re.finditer(r'href="(?P<href>/[^"]+)"[^>]*>(?P<title>[^<]*입법예고[^<]*)</a>', html):

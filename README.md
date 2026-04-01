@@ -4,6 +4,11 @@
 
 Seed Regulation Monitor is a FastAPI-based dashboard for collecting, classifying, and reviewing regulatory changes relevant to the seed industry.
 
+## Author
+
+- Lee, Seunghwan
+- [leesh.elijah@gmail.com](mailto:leesh.elijah@gmail.com)
+
 ## Features
 
 - Collect promulgated laws and administrative rules

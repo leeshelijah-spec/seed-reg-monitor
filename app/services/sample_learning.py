@@ -13,6 +13,10 @@ STOPWORDS = {
 }
 
 
+def _normalize_markdown(text: str) -> str:
+    return text.replace(r"\#", "#").replace(r"\-", "-")
+
+
 @dataclass
 class SampleCase:
     title: str
@@ -39,7 +43,7 @@ def _extract_heading_list(text: str, heading: str) -> list[str]:
 def load_sample_cases(sample_dir: Path) -> list[SampleCase]:
     samples: list[SampleCase] = []
     for path in sorted(sample_dir.glob("*.md")):
-        text = path.read_text(encoding="utf-8")
+        text = _normalize_markdown(path.read_text(encoding="utf-8"))
         title = re.search(r"^#\s+(.+)$", text, re.M)
         severity = re.search(r"- 등급:\s*(.+)$", text, re.M)
         relevance = re.search(r"- 관련 여부:\s*(.+)$", text, re.M)
