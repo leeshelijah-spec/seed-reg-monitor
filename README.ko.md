@@ -50,6 +50,7 @@ tests/
 - 규제/뉴스 KPI 카드를 각각 2x2 배치로 재정렬
 - 뉴스 필터와 키워드 관리를 상단 `필터` 버튼으로 여는 토글 패널로 통합
 - 중요 기사 상위 리스트를 제거하고 차트/경영요약/운영현황 레이아웃을 1x2로 정리
+- 외부 공유 시 수정 기능을 막을 수 있도록 읽기 전용 ngrok 공유 흐름 추가
 
 ## 빠른 시작
 
@@ -133,6 +134,27 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 - 대시보드: [http://127.0.0.1:8010/](http://127.0.0.1:8010/)
 - 헬스 체크: [http://127.0.0.1:8010/health](http://127.0.0.1:8010/health)
 
+## 읽기 전용 공유
+
+외부에 대시보드를 공유하되 동기화, 리뷰, 키워드 관리, 기사 피드백 같은 수정 기능은 막고 싶을 때 읽기 전용 모드를 사용하세요.
+
+1. `.env.local`에 `READ_ONLY_MODE=true`를 설정하거나 아래 실행 스크립트를 사용합니다.
+2. 읽기 전용 대시보드를 실행합니다.
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_readonly_dashboard.ps1
+```
+
+3. ngrok 읽기 전용 공유를 시작합니다.
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_ngrok_readonly_share.ps1 -DisableBasicAuth
+```
+
+기본 인증까지 함께 걸고 싶다면 `-DisableBasicAuth` 옵션을 빼고 실행하면 됩니다.
+
+ngrok helper 스크립트는 로컬 전용 정책 파일 `config/ngrok-readonly-policy.local.yml`을 생성하고, 가능하면 `.tools/ngrok/ngrok.exe`를 사용합니다.
+
 ## 수동 동기화
 
 전체 수동 동기화:
@@ -172,7 +194,7 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 
 ## 주의사항
 
-- `.env`, `.env.local`, `config/news-keywords.json`, `data/*.db`는 Git에 올리지 않도록 `.gitignore`에 포함되어 있습니다.
+- `.env`, `.env.local`, `config/news-keywords.json`, `config/ngrok-readonly-policy.local.yml`, `data/*.db`는 Git에 올리지 않도록 `.gitignore`에 포함되어 있습니다.
 - 네이버 인증값은 절대 예제 파일이나 커밋에 직접 넣지 마세요.
 - 뉴스 기사 중복은 `originallink` 기준 해시로 제거하며, 동일 기사가 다른 키워드로 잡히면 `matched_keywords`에 병합됩니다.
 
