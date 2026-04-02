@@ -386,16 +386,42 @@ class KoreanLawAdapter:
         return matches
 
     def _run_fetcher(self, action: str, payload: dict[str, Any]) -> dict[str, Any]:
-        completed = subprocess.run(
-            ["node", str(self.fetcher_script), action, json.dumps(payload, ensure_ascii=False)],
-            cwd=settings.base_dir,
-            env=self.env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=True,
-        )
+        self._validate_fetcher_dependencies()
+
+        command = ["node", str(self.fetcher_script), action, json.dumps(payload, ensure_ascii=False)]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=settings.base_dir,
+                env=self.env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip()
+            stdout = (exc.stdout or "").strip()
+            details = stderr or stdout or "No stderr/stdout was captured."
+            raise RuntimeError(
+                "korean_law_fetcher failed. "
+                f"KOREAN_LAW_MCP_DIR={self.mcp_dir} "
+                f"command={' '.join(command)} "
+                f"details={details}"
+            ) from exc
         return json.loads(completed.stdout)
+
+    def _validate_fetcher_dependencies(self) -> None:
+        if not self.fetcher_script.exists():
+            raise FileNotFoundError(f"Fetcher script not found: {self.fetcher_script}")
+
+        build_file = self.mcp_dir / "build" / "lib" / "api-client.js"
+        if not build_file.exists():
+            raise FileNotFoundError(
+                "Korean law MCP build output was not found. "
+                f"Expected {build_file}. "
+                "Set KOREAN_LAW_MCP_DIR to a built korean-law-mcp checkout."
+            )
 
     def _read_law_oc(self) -> str:
         env_path = self.mcp_dir / ".env"

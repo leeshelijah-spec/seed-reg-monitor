@@ -30,6 +30,44 @@ def _as_bool(value: str | None, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _has_korean_law_build(path: Path) -> bool:
+    return (path / "build" / "lib" / "api-client.js").exists()
+
+
+def _resolve_korean_law_mcp_dir(raw_value: str | None) -> Path:
+    candidates: list[Path] = []
+
+    if raw_value:
+        candidates.append(Path(raw_value).expanduser())
+
+    candidates.extend(
+        [
+            BASE_DIR / "external" / "korean-law-mcp",
+            BASE_DIR.parent / "korean-law-mcp",
+            BASE_DIR.parent / "korean-law-mcp-main",
+            BASE_DIR.parent.parent / "korean-law-mcp",
+            BASE_DIR.parent.parent / "korean-law-mcp-main",
+            Path.home() / "Downloads" / "korean-law-mcp",
+            Path.home() / "Downloads" / "korean-law-mcp-main",
+        ]
+    )
+
+    seen: set[Path] = set()
+    normalized_candidates: list[Path] = []
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        normalized_candidates.append(resolved)
+
+    for candidate in normalized_candidates:
+        if _has_korean_law_build(candidate):
+            return candidate
+
+    return normalized_candidates[0]
+
+
 @dataclass(frozen=True)
 class Settings:
     app_env: str = os.getenv("APP_ENV", "development")
@@ -39,9 +77,7 @@ class Settings:
     timezone: str = "Asia/Seoul"
     base_dir: Path = BASE_DIR
     db_path: Path = Path(os.getenv("DB_PATH", str(BASE_DIR / "data" / "seed_reg_monitor.db"))).resolve()
-    korean_law_mcp_dir: Path = Path(
-        os.getenv("KOREAN_LAW_MCP_DIR", str(BASE_DIR / "external" / "korean-law-mcp"))
-    ).resolve()
+    korean_law_mcp_dir: Path = _resolve_korean_law_mcp_dir(os.getenv("KOREAN_LAW_MCP_DIR"))
     alert_recipients_path: Path = Path(
         os.getenv("ALERT_RECIPIENTS_PATH", str(BASE_DIR / "config" / "alert-recipients.json"))
     ).resolve()

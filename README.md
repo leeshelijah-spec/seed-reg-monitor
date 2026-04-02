@@ -50,6 +50,8 @@ tests/
 - Reworked the dashboard into compact 2x2 KPI grids with a toggle-based news filter panel
 - Reorganized the review area around unreviewed regulations and articles
 - Added read-only dashboard and ngrok sharing flows for external viewing without write access
+- Added an edit-mode launcher, favicon serving, and safer local startup defaults
+- Fixed regulation sync to auto-discover a valid `korean-law-mcp` build when the configured relative path is missing
 
 ## Quick Start
 

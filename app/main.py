@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -43,6 +44,12 @@ async def enforce_read_only_mode(request: Request, call_next):
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(router)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    favicon_path = Path("app") / "favicon.ico"
+    return FileResponse(favicon_path)
 
 
 @app.get("/health")
