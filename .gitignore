@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 .env.local
+.codex/
 .codex-uvicorn-*.log
 *.log
 config/alert-recipients.json
