@@ -50,6 +50,7 @@ tests/
 - Rearranged regulation and news KPI cards into separate 2x2 layouts
 - Combined news filters and keyword admin controls into a toggle panel opened by the `필터` button
 - Removed the top-important-articles block and kept charts, executive summary, and operations in 1x2 rows
+- Added a read-only ngrok sharing flow so external viewers can browse the dashboard without write access
 
 ## Quick Start
 
@@ -133,6 +134,27 @@ If you are not in an activated virtual environment, prefer `.venv\Scripts\python
 - Dashboard: [http://127.0.0.1:8010/](http://127.0.0.1:8010/)
 - Health check: [http://127.0.0.1:8010/health](http://127.0.0.1:8010/health)
 
+## Read-Only Sharing
+
+Use read-only mode when you want to share the dashboard externally without exposing sync, review, keyword, or feedback actions.
+
+1. Set `READ_ONLY_MODE=true` in `.env.local`, or use the helper script below.
+2. Start the dashboard in read-only mode:
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_readonly_dashboard.ps1
+```
+
+3. Start ngrok in read-only mode:
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_ngrok_readonly_share.ps1 -DisableBasicAuth
+```
+
+If you want basic auth on top of read-only mode, omit `-DisableBasicAuth`.
+
+The ngrok helper writes a local-only policy file at `config/ngrok-readonly-policy.local.yml` and uses `.tools/ngrok/ngrok.exe` when available.
+
 ## Manual Sync
 
 Full manual sync:
@@ -172,7 +194,7 @@ Release note conventions are documented in [docs/releases/README.md](docs/releas
 
 ## Notes
 
-- `.env`, `.env.local`, `config/news-keywords.json`, and `data/*.db` are gitignored.
+- `.env`, `.env.local`, `config/news-keywords.json`, `config/ngrok-readonly-policy.local.yml`, and `data/*.db` are gitignored.
 - News deduplication is based on `originallink` via `duplicate_hash`.
 - When the same article is matched by multiple keywords, they are merged into `matched_keywords`.
 
