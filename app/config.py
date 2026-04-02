@@ -23,6 +23,7 @@ class Settings:
     app_env: str = os.getenv("APP_ENV", "development")
     app_host: str = os.getenv("APP_HOST", "127.0.0.1")
     app_port: int = int(os.getenv("APP_PORT", "8010"))
+    read_only_mode: bool = _as_bool(os.getenv("READ_ONLY_MODE"), False)
     timezone: str = "Asia/Seoul"
     base_dir: Path = BASE_DIR
     db_path: Path = Path(os.getenv("DB_PATH", str(BASE_DIR / "data" / "seed_reg_monitor.db"))).resolve()

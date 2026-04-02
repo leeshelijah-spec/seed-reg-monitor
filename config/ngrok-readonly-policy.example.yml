@@ -1,0 +1,14 @@
+on_http_request:
+  - name: Require basic auth for the shared dashboard
+    actions:
+      - type: basic-auth
+        config:
+          credentials:
+            - "viewer:change-this-password"
+  - name: Block write methods before they reach the app
+    expressions:
+      - req.method != 'GET' && req.method != 'HEAD'
+    actions:
+      - type: deny
+        config:
+          status_code: 403

@@ -12,3 +12,6 @@ data/*.db
 data/outbox/
 *.sqlite3
 Thumbs.db
+ngrok_recovery_codes.txt
+config/ngrok-readonly-policy.local.yml
+.tools/ngrok/
