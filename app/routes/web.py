@@ -19,6 +19,7 @@ from ..services.news_utils import now_iso
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
+templates.env.globals["settings"] = settings
 ACTION_STATUS_OPTIONS = ("미확인", "조치필요", "조치중", "조치완료", "해당없음")
 NEWS_FEEDBACK_TYPES = ("중요", "잡음", "분류오류")
 
