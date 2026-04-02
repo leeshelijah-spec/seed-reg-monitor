@@ -1,0 +1,40 @@
+[
+  {
+    "keyword": "종자산업",
+    "items": [
+      {
+        "title": "<b>종자산업</b> 수출 확대 위해 검역 협력 강화",
+        "description": "정부와 업계가 종자 수출 확대를 위해 검역 절차와 현지 인증 대응을 강화한다.",
+        "link": "https://news.naver.com/sample/1",
+        "originallink": "https://example.com/news/seed-export-check",
+        "pubDate": "Wed, 02 Apr 2026 09:00:00 +0900"
+      },
+      {
+        "title": "채소 종자 공급 차질 우려에 업계 대응 회의",
+        "description": "이상기후와 병해충 확산으로 채소 종자 공급 일정 재점검 필요성이 커졌다.",
+        "link": "https://news.naver.com/sample/2",
+        "originallink": "https://example.com/news/vegetable-seed-supply",
+        "pubDate": "Wed, 02 Apr 2026 08:20:00 +0900"
+      }
+    ]
+  },
+  {
+    "keyword": "토마토",
+    "items": [
+      {
+        "title": "토마토 신품종 출시 경쟁 본격화",
+        "description": "주요 종묘사가 고당도 토마토 신품종을 잇달아 공개하며 시장 경쟁이 심화되고 있다.",
+        "link": "https://news.naver.com/sample/3",
+        "originallink": "https://example.com/news/tomato-new-variety",
+        "pubDate": "Tue, 01 Apr 2026 15:40:00 +0900"
+      },
+      {
+        "title": "토마토 재배지 바이러스 확산, 묘 관리 강화 필요",
+        "description": "바이러스 확산으로 육묘 단계 품질 관리와 공급 일정 조정이 필요하다는 분석이 나왔다.",
+        "link": "https://news.naver.com/sample/4",
+        "originallink": "https://example.com/news/tomato-virus-risk",
+        "pubDate": "Tue, 01 Apr 2026 07:15:00 +0900"
+      }
+    ]
+  }
+]

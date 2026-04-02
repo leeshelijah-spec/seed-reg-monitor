@@ -2,9 +2,11 @@
 __pycache__/
 *.pyc
 .env
+.env.local
 .codex-uvicorn-*.log
 *.log
 config/alert-recipients.json
+config/news-keywords.json
 data/*.db
 data/outbox/
 *.sqlite3

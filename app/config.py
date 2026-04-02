@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env.local", override=True)
 
 
 def _as_bool(value: str | None, default: bool) -> bool:
@@ -31,10 +32,21 @@ class Settings:
     alert_recipients_path: Path = Path(
         os.getenv("ALERT_RECIPIENTS_PATH", str(BASE_DIR / "config" / "alert-recipients.json"))
     ).resolve()
+    news_keywords_path: Path = Path(
+        os.getenv("NEWS_KEYWORDS_PATH", str(BASE_DIR / "config" / "news-keywords.json"))
+    ).resolve()
     sample_cases_dir: Path = (BASE_DIR / "docs" / "mvp" / "sample-cases").resolve()
     data_dir: Path = (BASE_DIR / "data").resolve()
     outbox_dir: Path = (BASE_DIR / "data" / "outbox").resolve()
     scheduler_enabled: bool = _as_bool(os.getenv("ENABLE_SCHEDULER"), True)
+    naver_client_id: str | None = os.getenv("NAVER_CLIENT_ID") or None
+    naver_client_secret: str | None = os.getenv("NAVER_CLIENT_SECRET") or None
+    naver_news_display: int = int(os.getenv("NAVER_NEWS_DISPLAY", "10"))
+    naver_news_sort: str = os.getenv("NAVER_NEWS_SORT", "date")
+    naver_news_max_retries: int = int(os.getenv("NAVER_NEWS_MAX_RETRIES", "3"))
+    naver_news_timeout: int = int(os.getenv("NAVER_NEWS_TIMEOUT", "15"))
+    news_scheduler_hour: int = int(os.getenv("NEWS_SCHEDULER_HOUR", "8"))
+    news_scheduler_minute: int = int(os.getenv("NEWS_SCHEDULER_MINUTE", "40"))
     smtp_host: str | None = os.getenv("SMTP_HOST") or None
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
     smtp_username: str | None = os.getenv("SMTP_USERNAME") or None

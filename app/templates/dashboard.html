@@ -1,48 +1,305 @@
 {% extends "base.html" %}
 {% block title %}Dashboard | Seed Regulation Monitor{% endblock %}
 {% block content %}
-<section class="hero-card">
-  <div>
-    <p class="eyebrow">Daily Compliance Watch</p>
-    <h2>종자 산업 관련 규제 변화와 조치 현황을 한 화면에서 확인합니다.</h2>
-    {% if latest_sync %}
-    <p class="muted">최근 동기화: {{ latest_sync.finished_at or latest_sync.started_at }} / 상태: {{ latest_sync.status }}</p>
-    {% else %}
-    <p class="muted">아직 동기화 이력이 없습니다. 우측 상단에서 수동 동기화를 실행할 수 있습니다.</p>
-    {% endif %}
+<section class="section-block">
+  <div class="kpi-overview-grid">
+    <article class="panel kpi-panel">
+      <div class="section-head compact-head">
+        <div>
+          <p class="eyebrow">Regulation</p>
+          <h3>규제 모니터링 현황</h3>
+          {% if latest_sync %}
+          <p class="section-meta">최근 규제 동기화: {{ latest_sync.finished_at or latest_sync.started_at }} / 상태: {{ latest_sync.status }}</p>
+          {% else %}
+          <p class="section-meta">아직 규제 동기화 이력이 없습니다. 상단 버튼으로 수동 실행할 수 있습니다.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <section class="stats-grid stats-grid-two-by-two stats-grid-compact">
+        <article class="stat-card stat-card-chart">
+          <div class="stat-head">
+            <span>중요도 분포</span>
+          </div>
+          <div class="chart-shell chart-shell-stat">
+            <canvas id="severityChart" height="160"></canvas>
+          </div>
+        </article>
+
+        <article class="stat-card">
+          <span>오늘 신규 건수</span>
+          <strong>{{ stats.today_new_count }}</strong>
+        </article>
+
+        <article class="stat-card">
+          <span>미검토 건수</span>
+          <strong>{{ stats.unreviewed_count }}</strong>
+        </article>
+
+        <article class="stat-card">
+          <span>시행일 임박 건수</span>
+          <strong>{{ stats.imminent_count }}</strong>
+        </article>
+      </section>
+    </article>
+
+    <article class="panel kpi-panel">
+      <div class="section-head compact-head">
+        <div>
+          <p class="eyebrow">News Trend</p>
+          <h3>네이버 뉴스 기반 산업 트렌드/대응 분석</h3>
+          {% if news_api_configured %}
+          <p class="section-meta">`.env.local`의 네이버 API 설정이 반영되어 뉴스 수집을 사용할 수 있습니다.</p>
+          {% else %}
+          <p class="section-meta">네이버 뉴스 수집은 `.env.local`에 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`를 설정한 뒤 활성화됩니다.</p>
+          {% endif %}
+        </div>
+        <div class="section-actions">
+          <button class="ghost-button section-toggle-button" type="button" data-toggle-target="newsToolsPanel" aria-expanded="false">필터</button>
+        </div>
+      </div>
+
+      <section class="stats-grid stats-grid-two-by-two stats-grid-compact">
+        <article class="stat-card">
+          <span>최근 7일 기사 수</span>
+          <strong>{{ news_dashboard.kpis.recent_count }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>중요 이상 기사</span>
+          <strong>{{ news_dashboard.kpis.important_count }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>즉시조치 기사</span>
+          <strong>{{ news_dashboard.kpis.urgent_count }}</strong>
+        </article>
+        <article class="stat-card">
+          <span>가장 많이 언급된 주제</span>
+          <strong class="stat-label">{{ news_dashboard.kpis.top_topic }}</strong>
+        </article>
+      </section>
+    </article>
   </div>
 </section>
 
-<section class="stats-grid stats-grid-four">
-  <article class="stat-card stat-card-chart">
-    <div class="stat-head">
-      <span>중요도 분포</span>
+<section class="section-block">
+  {% set news_tools_open = news_dashboard.filters.start_date or news_dashboard.filters.end_date or news_dashboard.filters.keyword or news_dashboard.filters.topic_category or news_dashboard.filters.business_impact_level or news_dashboard.filters.owner_department %}
+  <section id="newsToolsPanel" class="panel collapsible-panel{% if not news_tools_open %} hidden{% endif %}">
+    <div class="tools-grid">
+      <div>
+        <div class="panel-head">
+          <h3>필터</h3>
+        </div>
+        <form action="/" method="get" class="filter-form">
+          <label class="field-group">
+            <span class="field-label">시작일</span>
+            <input class="form-control" type="date" name="news_start_date" value="{{ news_dashboard.filters.start_date }}">
+          </label>
+          <label class="field-group">
+            <span class="field-label">종료일</span>
+            <input class="form-control" type="date" name="news_end_date" value="{{ news_dashboard.filters.end_date }}">
+          </label>
+          <label class="field-group">
+            <span class="field-label">키워드</span>
+            <select class="form-control" name="news_keyword">
+              <option value="">전체</option>
+              {% for option in news_dashboard.filter_options.keywords %}
+              <option value="{{ option }}" {% if option == news_dashboard.filters.keyword %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field-group">
+            <span class="field-label">주제</span>
+            <select class="form-control" name="news_topic_category">
+              <option value="">전체</option>
+              {% for option in news_dashboard.filter_options.topic_categories %}
+              <option value="{{ option }}" {% if option == news_dashboard.filters.topic_category %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field-group">
+            <span class="field-label">영향도</span>
+            <select class="form-control" name="news_business_impact_level">
+              <option value="">전체</option>
+              {% for option in news_dashboard.filter_options.business_impact_levels %}
+              <option value="{{ option }}" {% if option == news_dashboard.filters.business_impact_level %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field-group">
+            <span class="field-label">담당부서</span>
+            <select class="form-control" name="news_owner_department">
+              <option value="">전체</option>
+              {% for option in news_dashboard.filter_options.owner_departments %}
+              <option value="{{ option }}" {% if option == news_dashboard.filters.owner_department %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <div class="filter-actions">
+            <button class="sync-button sync-button-compact" type="submit">적용</button>
+            <a class="ghost-button" href="/">초기화</a>
+          </div>
+        </form>
+      </div>
+
+      <div>
+        <div class="panel-head">
+          <h3>관리자용 키워드 관리</h3>
+        </div>
+        <form action="/news/keywords" method="post" class="keyword-form">
+          <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#newsToolsPanel">
+          <label class="field-group">
+            <span class="field-label">키워드</span>
+            <input class="form-control" type="text" name="keyword" placeholder="예: 수박 종자">
+          </label>
+          <label class="field-group">
+            <span class="field-label">그룹</span>
+            <input class="form-control" type="text" name="keyword_group" placeholder="예: 품목 확장">
+          </label>
+          <label class="field-group full">
+            <span class="field-label">메모</span>
+            <input class="form-control" type="text" name="notes" placeholder="추가 배경이나 내부 메모">
+          </label>
+          <button class="sync-button sync-button-compact" type="submit">키워드 추가</button>
+        </form>
+        <div class="keyword-list">
+          {% for keyword in news_keywords %}
+          <div class="keyword-item">
+            <div>
+              <strong>{{ keyword.keyword }}</strong>
+              <p class="table-subtext">{{ keyword.keyword_group }} / {{ keyword.source_type }} / {{ "활성" if keyword.is_active else "비활성" }}</p>
+            </div>
+            <form action="/news/keywords/{{ keyword.id }}/toggle" method="post">
+              <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#newsToolsPanel">
+              <input type="hidden" name="desired_state" value="{{ 'deactivate' if keyword.is_active else 'activate' }}">
+              <button class="mini-button" type="submit">{{ "비활성화" if keyword.is_active else "활성화" }}</button>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
     </div>
-    <div class="chart-shell">
-      <canvas id="severityChart" height="160"></canvas>
+  </section>
+
+  <article class="panel wide analysis-shell">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Operations & Analysis</p>
+        <h3>분석 및 운영 현황</h3>
+      </div>
     </div>
-  </article>
 
-  <article class="stat-card">
-    <span>오늘 신규 건수</span>
-    <strong>{{ stats.today_new_count }}</strong>
-  </article>
+    <section class="content-grid content-grid-two content-grid-dashboard">
+      <article class="panel panel-half nested-panel">
+        <div class="panel-head">
+          <h3>카테고리별 기사 건수</h3>
+        </div>
+        <div class="chart-shell tall">
+          <canvas id="newsCategoryChart"></canvas>
+        </div>
+      </article>
 
-  <article class="stat-card">
-    <span>미검토 건수</span>
-    <strong>{{ stats.unreviewed_count }}</strong>
-  </article>
+      <article class="panel panel-half nested-panel">
+        <div class="panel-head">
+          <h3>키워드별 언급 추이</h3>
+        </div>
+        <div class="chart-shell tall">
+          <canvas id="newsKeywordChart"></canvas>
+        </div>
+      </article>
+      <article class="panel panel-half nested-panel">
+        <div class="panel-head">
+          <h3>경영 요약 패널</h3>
+        </div>
+        <div class="summary-grid">
+          <div>
+            <p class="cluster-label">금주 핵심 트렌드</p>
+            <ul class="summary-list">
+              {% for item in news_dashboard.executive_summary.key_trends %}
+              <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div>
+            <p class="cluster-label">경영 관점 시사점</p>
+            <ul class="summary-list">
+              {% for item in news_dashboard.executive_summary.implications %}
+              <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          <div>
+            <p class="cluster-label">추천 대응 과제</p>
+            <ul class="summary-list">
+              {% for item in news_dashboard.executive_summary.recommended_tasks %}
+              <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      </article>
 
-  <article class="stat-card">
-    <span>시행일 임박 건수</span>
-    <strong>{{ stats.imminent_count }}</strong>
+      <article class="panel panel-half nested-panel">
+        <div class="panel-head">
+          <h3>운영 현황</h3>
+        </div>
+        <div class="ops-stats">
+          <div class="ops-stat">
+            <span>활성 키워드</span>
+            <strong>{{ news_dashboard.operations.active_keyword_count }}</strong>
+          </div>
+          <div class="ops-stat">
+            <span>오늘 API 호출</span>
+            <strong>{{ news_dashboard.operations.usage_today }}</strong>
+          </div>
+          <div class="ops-stat">
+            <span>최근 7일 오류</span>
+            <strong>{{ news_dashboard.operations.error_count }}</strong>
+          </div>
+          <div class="ops-stat">
+            <span>API 상태</span>
+            <strong>{{ "Configured" if news_api_configured else "Pending" }}</strong>
+          </div>
+        </div>
+        <div class="table-wrap compact">
+          <table>
+            <thead>
+              <tr>
+                <th>시각</th>
+                <th>키워드</th>
+                <th>상태</th>
+                <th>수집/저장/중복</th>
+                <th>메시지</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for log in news_dashboard.operations.latest_logs %}
+              <tr>
+                <td>{{ log.started_at[:16] }}</td>
+                <td>{{ log.keyword }}</td>
+                <td>{{ log.status }}</td>
+                <td>{{ log.fetched_count }} / {{ log.inserted_count }} / {{ log.duplicate_count }}</td>
+                <td>{{ log.message }}</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="5" class="empty-row">뉴스 수집 로그가 없습니다.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </section>
   </article>
 </section>
 
-<section class="content-grid">
+<section class="section-block" id="regulation-review-list">
   <article class="panel wide">
     <div class="panel-head">
-      <h3>최근 등록 목록</h3>
+      <h3>미검토 목록</h3>
+      <a class="ghost-button section-toggle-button" href="{{ regulation_toggle_url }}">
+        {{ "미검토만 보기" if show_all_regulations else "전체목록보기" }}
+      </a>
     </div>
     <div class="table-wrap">
       <table>
@@ -71,7 +328,68 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="7" class="empty-row">등록된 규제가 없습니다.</td>
+            <td colspan="7" class="empty-row">{{ "등록된 규제가 없습니다." if show_all_regulations else "미검토 항목이 없습니다." }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<section class="section-block" id="news-review-list">
+  <article class="panel wide">
+    <div class="panel-head">
+      <h3>미검토 기사 목록</h3>
+      <a class="ghost-button section-toggle-button" href="{{ news_toggle_url }}">
+        {{ "미검토만 보기" if news_dashboard.filters.show_all_articles else "전체목록보기" }}
+      </a>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>제목</th>
+            <th>게시일</th>
+            <th>키워드</th>
+            <th>카테고리</th>
+            <th>영향도</th>
+            <th>긴급도</th>
+            <th>권장 대응</th>
+            <th>원문</th>
+            <th>피드백</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for article in news_dashboard.articles %}
+          <tr>
+            <td>
+              <strong>{{ article.title }}</strong>
+              <p class="table-subtext">{{ article.source_title or "-" }} / 관련도 {{ article.relevance_score }}</p>
+            </td>
+            <td>{{ article.published_at[:10] if article.published_at else "-" }}</td>
+            <td>{{ article.matched_keywords|join(", ") }}</td>
+            <td>{{ article.topic_category }}</td>
+            <td><span class="badge impact-{{ article.business_impact_level }}">{{ article.business_impact_level }}</span></td>
+            <td><span class="badge urgency-{{ article.urgency_level }}">{{ article.urgency_level }}</span></td>
+            <td><pre class="inline-pre">{{ article.recommended_action }}</pre></td>
+            <td><a href="{{ article.original_link }}" target="_blank" rel="noreferrer">원문</a></td>
+            <td>
+              <span class="status-chip">{{ article.review_status }}</span>
+              <div class="feedback-actions">
+                {% for feedback_type in news_feedback_types %}
+                <form action="/news/{{ article.id }}/feedback" method="post">
+                  <input type="hidden" name="feedback_type" value="{{ feedback_type }}">
+                  <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#news-review-list">
+                  <button class="mini-button" type="submit">{{ feedback_type }}</button>
+                </form>
+                {% endfor %}
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9" class="empty-row">{{ "표시할 기사 목록이 없습니다." if news_dashboard.filters.show_all_articles else "미검토 기사 항목이 없습니다." }}</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -81,14 +399,31 @@
 </section>
 
 <script>
-  const chartData = {{ severity_distribution|tojson }};
-  const ctx = document.getElementById("severityChart");
-  new Chart(ctx, {
+  document.querySelectorAll("[data-toggle-target]").forEach((button) => {
+    const panel = document.getElementById(button.dataset.toggleTarget);
+    if (!panel) {
+      return;
+    }
+
+    const syncExpandedState = () => {
+      button.setAttribute("aria-expanded", panel.classList.contains("hidden") ? "false" : "true");
+    };
+
+    syncExpandedState();
+    button.addEventListener("click", () => {
+      panel.classList.toggle("hidden");
+      syncExpandedState();
+    });
+  });
+
+  const severityData = {{ severity_distribution|tojson }};
+  const severityCtx = document.getElementById("severityChart");
+  new Chart(severityCtx, {
     type: "doughnut",
     data: {
-      labels: chartData.map((item) => item.label),
+      labels: severityData.map((item) => item.label),
       datasets: [{
-        data: chartData.map((item) => item.value),
+        data: severityData.map((item) => item.value),
         backgroundColor: ["#006f36", "#00984b", "#42b772", "#b8dec8"],
         borderWidth: 0
       }]
@@ -105,6 +440,61 @@
             padding: 14
           }
         }
+      }
+    }
+  });
+
+  const category7 = {{ news_dashboard.trend.category_7d|tojson }};
+  const category30 = {{ news_dashboard.trend.category_30d|tojson }};
+  const categoryLabels = [...new Set([...category7.map((item) => item.label), ...category30.map((item) => item.label)])];
+  new Chart(document.getElementById("newsCategoryChart"), {
+    type: "bar",
+    data: {
+      labels: categoryLabels,
+      datasets: [
+        {
+          label: "최근 7일",
+          data: categoryLabels.map((label) => (category7.find((item) => item.label === label) || {}).value || 0),
+          backgroundColor: "#0b8457"
+        },
+        {
+          label: "최근 30일",
+          data: categoryLabels.map((label) => (category30.find((item) => item.label === label) || {}).value || 0),
+          backgroundColor: "#74c69d"
+        }
+      ]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" }
+      }
+    }
+  });
+
+  const keywordSeries = {{ news_dashboard.trend.keyword_series|tojson }};
+  const keywordDays = [...new Set(keywordSeries.map((item) => item.day))];
+  const keywordNames = [...new Set(keywordSeries.map((item) => item.keyword))].slice(0, 6);
+  const palette = ["#1b4332", "#2d6a4f", "#40916c", "#52b788", "#74c69d", "#95d5b2"];
+  new Chart(document.getElementById("newsKeywordChart"), {
+    type: "line",
+    data: {
+      labels: keywordDays,
+      datasets: keywordNames.map((keyword, index) => ({
+        label: keyword,
+        data: keywordDays.map((day) => {
+          const match = keywordSeries.find((item) => item.keyword === keyword && item.day === day);
+          return match ? match.value : 0;
+        }),
+        borderColor: palette[index % palette.length],
+        backgroundColor: palette[index % palette.length],
+        tension: 0.3
+      }))
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" }
       }
     }
   });

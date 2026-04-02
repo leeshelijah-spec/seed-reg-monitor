@@ -44,6 +44,9 @@ def init_db() -> None:
               AND summary IS NOT NULL
             """
         )
+    from .services.news_keywords import NewsKeywordService
+
+    NewsKeywordService().ensure_seed_data()
 
 
 def _ensure_column(
@@ -69,4 +72,13 @@ def row_to_regulation(row: sqlite3.Row | None) -> dict[str, Any] | None:
     item = dict(row)
     item["category"] = json.loads(item.get("category") or "[]")
     item["department"] = json.loads(item.get("department") or "[]")
+    return item
+
+
+def row_to_news_article(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    item = dict(row)
+    item["matched_keywords"] = json.loads(item.get("matched_keywords") or "[]")
+    item["analysis_trace"] = json.loads(item.get("analysis_trace") or "{}")
     return item

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from ..config import settings
 from .ingestion import IngestionService
+from .news_ingestion import NewsIngestionService
 
 
 def create_scheduler() -> BackgroundScheduler:
@@ -17,4 +18,18 @@ def create_scheduler() -> BackgroundScheduler:
         replace_existing=True,
         kwargs={"lookback_days": 3},
     )
+    news_service = NewsIngestionService()
+    if news_service.is_configured():
+        scheduler.add_job(
+            news_service.run,
+            CronTrigger(
+                day_of_week="mon-fri",
+                hour=settings.news_scheduler_hour,
+                minute=settings.news_scheduler_minute,
+                timezone=ZoneInfo(settings.timezone),
+            ),
+            id="weekday-news-sync",
+            replace_existing=True,
+            kwargs={"run_type": "scheduled"},
+        )
     return scheduler
