@@ -17,7 +17,7 @@ Seed Regulation Monitor is a FastAPI dashboard for monitoring seed-industry regu
 - Record action status and review notes
 - Collect, deduplicate, and analyze Naver news for seed-industry trends
 - Capture article feedback, keyword management, and collection logs
-- Track updates through release notes
+- Track updates through dated feature updates
 
 ## Stack
 
@@ -43,14 +43,13 @@ scripts/
 tests/
 ```
 
-## Latest Release
+## Latest Update
 
-- Latest release: [2026-04-02](docs/releases/2026-04-02.md)
-- Removed the hero box and moved the descriptive copy under `Seed Regulation Monitor`
-- Rearranged regulation and news KPI cards into separate 2x2 layouts
-- Combined news filters and keyword admin controls into a toggle panel opened by the `필터` button
-- Removed the top-important-articles block and kept charts, executive summary, and operations in 1x2 rows
-- Added a read-only ngrok sharing flow so external viewers can browse the dashboard without write access
+- Latest update: [2026-04-02](docs/feature-updates/2026-04-02.md)
+- Added the Naver-news ingestion, analysis, dashboard, and sample-data workflow
+- Reworked the dashboard into compact 2x2 KPI grids with a toggle-based news filter panel
+- Reorganized the review area around unreviewed regulations and articles
+- Added read-only dashboard and ngrok sharing flows for external viewing without write access
 
 ## Quick Start
 
@@ -155,6 +154,19 @@ If you want basic auth on top of read-only mode, omit `-DisableBasicAuth`.
 
 The ngrok helper writes a local-only policy file at `config/ngrok-readonly-policy.local.yml` and uses `.tools/ngrok/ngrok.exe` when available.
 
+## Edit Mode
+
+Use edit mode when you want sync, review, keyword, and feedback actions enabled.
+
+1. Set `READ_ONLY_MODE=false` in `.env.local`, or use the helper script below.
+2. Start the dashboard in edit mode:
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_dashboard.ps1
+```
+
+Windows users can also double-click `start_dashboard.cmd` from the repository root.
+
 ## Manual Sync
 
 Full manual sync:
@@ -185,7 +197,7 @@ Run tests:
 
 Architecture notes are documented in [docs/news-dashboard-architecture.md](docs/news-dashboard-architecture.md).
 
-Release note conventions are documented in [docs/releases/README.md](docs/releases/README.md).
+Feature update conventions are documented in [docs/feature-updates/README.md](docs/feature-updates/README.md).
 
 ## Sample Data
 

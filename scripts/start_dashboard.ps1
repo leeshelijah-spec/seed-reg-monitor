@@ -28,11 +28,11 @@ if ($existingListener) {
     throw "Port $Port is already in use by $processLabel. Stop that process or run this script with -Port <different-port>."
 }
 
-$env:READ_ONLY_MODE = "true"
+$env:READ_ONLY_MODE = "false"
 
 Set-Location $repoRoot
 
-Write-Host "Starting read-only dashboard on http://$BindHost`:$Port"
+Write-Host "Starting dashboard in edit mode on http://$BindHost`:$Port"
 & $pythonExe -m uvicorn app.main:app `
     --app-dir $repoRoot `
     --reload `

@@ -1,10 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const action = process.argv[2];
 const payload = JSON.parse(process.argv[3] ?? "{}");
-const mcpDir = process.env.KOREAN_LAW_MCP_DIR || "C:/Users/senak/Downloads/korean-law-mcp-main";
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDir, "..");
+const defaultMcpDir = path.resolve(repoRoot, "external", "korean-law-mcp");
+const mcpDir = process.env.KOREAN_LAW_MCP_DIR || defaultMcpDir;
 
 if (!process.env.LAW_OC) {
   const envPath = path.join(mcpDir, ".env");

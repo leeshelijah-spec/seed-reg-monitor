@@ -4,12 +4,24 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
-load_dotenv(BASE_DIR / ".env.local", override=True)
+
+
+def _load_settings_env() -> None:
+    merged_values: dict[str, str | None] = {
+        **dotenv_values(BASE_DIR / ".env"),
+        **dotenv_values(BASE_DIR / ".env.local"),
+    }
+
+    for key, value in merged_values.items():
+        if value is not None and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_settings_env()
 
 
 def _as_bool(value: str | None, default: bool) -> bool:
@@ -28,7 +40,7 @@ class Settings:
     base_dir: Path = BASE_DIR
     db_path: Path = Path(os.getenv("DB_PATH", str(BASE_DIR / "data" / "seed_reg_monitor.db"))).resolve()
     korean_law_mcp_dir: Path = Path(
-        os.getenv("KOREAN_LAW_MCP_DIR", "C:/Users/senak/Downloads/korean-law-mcp-main")
+        os.getenv("KOREAN_LAW_MCP_DIR", str(BASE_DIR / "external" / "korean-law-mcp"))
     ).resolve()
     alert_recipients_path: Path = Path(
         os.getenv("ALERT_RECIPIENTS_PATH", str(BASE_DIR / "config" / "alert-recipients.json"))
