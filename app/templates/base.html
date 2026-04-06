@@ -15,19 +15,15 @@
         <p class="eyebrow">Daily Compliance Watch</p>
         <h1><a href="/">Seed Regulation Monitor</a></h1>
         <p class="topbar-subtitle">규제 모니터링과 네이버 뉴스 기반 산업 트렌드 대응을 한 화면에서 함께 관리합니다.</p>
-        {% if settings.read_only_mode %}
-        <p class="topbar-subtitle">읽기 전용 공유 모드입니다. 외부 사용자는 조회만 가능하고 수정 작업은 차단됩니다.</p>
-        {% endif %}
       </div>
       <div class="topbar-actions">
-        {% if not settings.read_only_mode %}
         <form action="/sync" method="post">
           <button class="sync-button sync-button-compact" type="submit">규제 동기화</button>
         </form>
         <form action="/news/sync" method="post">
           <button class="sync-button secondary sync-button-compact" type="submit">뉴스 수집</button>
         </form>
-        {% endif %}
+        {% block topbar_actions_extra %}{% endblock %}
       </div>
     </header>
     <main>
