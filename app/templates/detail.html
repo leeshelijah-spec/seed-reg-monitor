@@ -79,7 +79,6 @@
         </div>
       </dl>
 
-      {% if not settings.read_only_mode %}
       <form action="/regulations/{{ regulation.id }}/review" method="post" class="review-form">
         <div class="field-group">
           <label class="field-label" for="action_status">조치 여부</label>
@@ -106,9 +105,6 @@
           <button class="sync-button" type="submit">저장</button>
         </div>
       </form>
-      {% else %}
-      <p class="muted">Read-only mode is enabled. Review updates are disabled on the shared view.</p>
-      {% endif %}
     </section>
   </div>
 </article>

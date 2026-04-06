@@ -20,6 +20,20 @@ class NewsAnalysisServiceTest(unittest.TestCase):
         self.assertGreaterEqual(result.relevance_score, 60)
         self.assertEqual(result.owner_department, "품질")
 
+    def test_feedback_action_is_reflected_in_recommended_action(self) -> None:
+        service = NewsAnalysisService()
+        updated_action = service.apply_feedback_to_action(
+            base_action="품질에서 기사 원문을 검토하세요.",
+            review_status="관련",
+            owner_department="품질",
+            impact_level="중요",
+            urgency_level="high",
+            comment="수입 일정 영향 여부를 주간회의에서 검토",
+        )
+
+        self.assertIn("관련 기사로 확인", updated_action)
+        self.assertIn("피드백 조치사항: 수입 일정 영향 여부를 주간회의에서 검토", updated_action)
+
 
 if __name__ == "__main__":
     unittest.main()

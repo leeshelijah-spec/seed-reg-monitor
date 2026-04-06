@@ -36,6 +36,30 @@ def init_db() -> None:
             column_name="amendment_reason",
             definition="TEXT",
         )
+        _ensure_column(
+            connection,
+            table_name="news_feedback",
+            column_name="is_relevant",
+            definition="INTEGER NOT NULL DEFAULT 0",
+        )
+        _ensure_column(
+            connection,
+            table_name="news_feedback",
+            column_name="is_noise",
+            definition="INTEGER NOT NULL DEFAULT 0",
+        )
+        _ensure_column(
+            connection,
+            table_name="news_feedback",
+            column_name="impact_level",
+            definition="TEXT",
+        )
+        _ensure_column(
+            connection,
+            table_name="news_feedback",
+            column_name="urgency_level",
+            definition="TEXT",
+        )
         connection.execute(
             """
             UPDATE regulations
@@ -43,6 +67,34 @@ def init_db() -> None:
             WHERE amendment_reason IS NULL
               AND summary IS NOT NULL
             """
+        )
+        connection.execute(
+            """
+            UPDATE news_feedback
+            SET is_noise = 1
+            WHERE feedback_type = ?
+              AND is_noise = 0
+            """,
+            ("\uc7a1\uc74c",),
+        )
+        connection.execute(
+            """
+            UPDATE news_feedback
+            SET is_relevant = 1
+            WHERE feedback_type = ?
+              AND is_relevant = 0
+            """,
+            ("\uc911\uc694",),
+        )
+        connection.execute(
+            """
+            UPDATE news_feedback
+            SET impact_level = COALESCE(impact_level, ?),
+                urgency_level = COALESCE(urgency_level, ?)
+            WHERE feedback_type = ?
+              AND is_relevant = 1
+            """,
+            ("\uc911\uc694", "high", "\uc911\uc694"),
         )
     from .services.news_keywords import NewsKeywordService
 

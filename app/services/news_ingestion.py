@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..database import get_connection, row_to_news_article
+from .news_feedback_learning import NewsFeedbackLearningService, UNREVIEWED_STATUS
 from .naver_news import NaverNewsClient
 from .news_analysis import NewsAnalysisService
 from .news_keywords import NewsKeywordService
@@ -22,6 +23,7 @@ class NewsIngestionService:
         self.client = NaverNewsClient()
         self.keyword_service = NewsKeywordService()
         self.analyzer = NewsAnalysisService()
+        self.feedback_learning = NewsFeedbackLearningService()
 
     def is_configured(self) -> bool:
         return self.client.is_configured()
@@ -95,6 +97,25 @@ class NewsIngestionService:
             {"title": title, "summary": summary, "published_at": published_at},
             matched_keywords=matched_keywords,
         )
+        feedback_reuse = self.feedback_learning.reuse_feedback(keyword=keyword, title=title)
+        impact_level = feedback_reuse.impact_level or analysis.business_impact_level
+        urgency_level = feedback_reuse.urgency_level or analysis.urgency_level
+        review_status = feedback_reuse.review_status or analysis.review_status
+        action_updater = getattr(self.analyzer, "apply_feedback_to_action", None)
+        if not callable(action_updater):
+            action_updater = NewsAnalysisService().apply_feedback_to_action
+        recommended_action = action_updater(
+            base_action=analysis.recommended_action,
+            review_status=review_status,
+            owner_department=analysis.owner_department,
+            impact_level=impact_level,
+            urgency_level=urgency_level,
+            comment=feedback_reuse.comment,
+        )
+        analysis_trace = {
+            **analysis.analysis_trace,
+            "feedback_learning": feedback_reuse.to_trace(),
+        }
         return {
             "keyword": keyword,
             "source_title": extract_source_title(original_link),
@@ -107,14 +128,14 @@ class NewsIngestionService:
             "duplicate_hash": build_duplicate_hash(original_link or naver_link, title=title),
             "raw_json": dumps_json(item),
             "topic_category": analysis.topic_category,
-            "business_impact_level": analysis.business_impact_level,
-            "urgency_level": analysis.urgency_level,
+            "business_impact_level": impact_level,
+            "urgency_level": urgency_level,
             "relevance_score": analysis.relevance_score,
-            "recommended_action": analysis.recommended_action,
+            "recommended_action": recommended_action,
             "owner_department": analysis.owner_department,
-            "review_status": analysis.review_status,
+            "review_status": review_status,
             "matched_keywords": matched_keywords,
-            "analysis_trace": analysis.analysis_trace,
+            "analysis_trace": analysis_trace,
         }
 
     def _upsert_article(self, article: dict[str, Any]) -> str:
@@ -134,6 +155,15 @@ class NewsIngestionService:
                     },
                     matched_keywords=merged_keywords,
                 )
+                updated_review_status = existing.get("review_status") or article["review_status"]
+                if updated_review_status == UNREVIEWED_STATUS and article["review_status"] != UNREVIEWED_STATUS:
+                    updated_review_status = article["review_status"]
+                updated_impact_level = article["business_impact_level"]
+                updated_urgency_level = article["urgency_level"]
+                if updated_review_status == UNREVIEWED_STATUS:
+                    updated_impact_level = merged_analysis.business_impact_level
+                    updated_urgency_level = merged_analysis.urgency_level
+
                 connection.execute(
                     """
                     UPDATE news_articles
@@ -148,6 +178,7 @@ class NewsIngestionService:
                         relevance_score = ?,
                         recommended_action = ?,
                         owner_department = ?,
+                        review_status = ?,
                         matched_keywords = ?,
                         analysis_trace = ?
                     WHERE id = ?
@@ -159,13 +190,19 @@ class NewsIngestionService:
                         article["naver_link"] or existing.get("naver_link"),
                         article["collected_at"],
                         merged_analysis.topic_category,
-                        merged_analysis.business_impact_level,
-                        merged_analysis.urgency_level,
+                        updated_impact_level,
+                        updated_urgency_level,
                         merged_analysis.relevance_score,
                         merged_analysis.recommended_action,
                         merged_analysis.owner_department,
+                        updated_review_status,
                         dumps_json(merged_keywords),
-                        dumps_json(merged_analysis.analysis_trace),
+                        dumps_json(
+                            {
+                                **merged_analysis.analysis_trace,
+                                "feedback_learning": article["analysis_trace"].get("feedback_learning", {}),
+                            }
+                        ),
                         existing["id"],
                     ),
                 )

@@ -115,6 +115,10 @@ CREATE TABLE IF NOT EXISTS news_feedback (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     article_id INTEGER NOT NULL,
     feedback_type TEXT NOT NULL,
+    is_relevant INTEGER NOT NULL DEFAULT 0,
+    is_noise INTEGER NOT NULL DEFAULT 0,
+    impact_level TEXT,
+    urgency_level TEXT,
     comment TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (article_id) REFERENCES news_articles(id)

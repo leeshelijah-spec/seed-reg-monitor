@@ -2,9 +2,39 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+import re
 from typing import Any
 
 from ..database import get_connection, row_to_news_article
+
+
+UNREVIEWED = "\ubbf8\uac80\ud1a0"
+IMPORTANT = "\uc911\uc694"
+IMMEDIATE = "\uc989\uc2dc\uc870\uce58"
+NEEDS_REVIEW = "\uac80\ud1a0\ud544\uc694"
+REFERENCE = "\ucc38\uace0"
+NOISE = "\uc7a1\uc74c"
+CLASSIFICATION_ERROR = "\ubd84\ub958\uc624\ub958"
+
+TITLE_TOKEN_RE = re.compile(r"[0-9A-Za-z\uac00-\ud7a3]+")
+NEWS_TITLE_STOPWORDS = {
+    "\uae30\uc0ac",
+    "\ub2e8\ub3c5",
+    "\uc18d\ubcf4",
+    "\uc885\ud569",
+    "\uc778\ud130\ubdf0",
+    "\ud604\uc7a5",
+    "\uc624\ub298",
+    "\uc774\ubc88",
+    "\uad00\ub828",
+    "\ub17c\ub780",
+    "\uae30\uc790",
+    "\ub274\uc2a4",
+    "\ub124\uc774\ubc84",
+}
+IMPACT_PRIORITY = {IMMEDIATE: 4, IMPORTANT: 3, NEEDS_REVIEW: 2, REFERENCE: 1}
+URGENCY_PRIORITY = {"high": 3, "medium": 2, "low": 1}
+REVIEW_PRIORITY = {CLASSIFICATION_ERROR: 3, IMPORTANT: 2, NOISE: 1, UNREVIEWED: 0}
 
 
 @dataclass
@@ -20,11 +50,13 @@ class NewsFilterParams:
 
 class NewsDashboardService:
     def load_dashboard(self, filters: NewsFilterParams) -> dict[str, Any]:
+        articles = self._load_articles(filters)
         return {
             "filters": self._serialize_filters(filters),
             "filter_options": self._load_filter_options(),
             "kpis": self._load_kpis(),
-            "articles": self._load_articles(filters),
+            "articles": articles,
+            "article_groups": self._group_articles(articles),
             "trend": self._load_trend_data(filters),
             "executive_summary": self._build_executive_summary(filters),
             "operations": self._load_operations(),
@@ -69,7 +101,7 @@ class NewsDashboardService:
             params.append(filters.owner_department)
         if apply_review_filter and not filters.show_all_articles:
             conditions.append("review_status = ?")
-            params.append("ë¯¸ê²€í† ")
+            params.append(UNREVIEWED)
 
         if not conditions:
             return "", params
@@ -115,29 +147,34 @@ class NewsDashboardService:
                 """
                 SELECT
                     COUNT(*) AS recent_count,
-                    SUM(CASE WHEN business_impact_level IN ('ì¤‘ìš”', 'ì¦‰ì‹œì¡°ì¹˜') THEN 1 ELSE 0 END) AS important_count,
-                    SUM(CASE WHEN business_impact_level = 'ì¦‰ì‹œì¡°ì¹˜' THEN 1 ELSE 0 END) AS urgent_count
+                    SUM(CASE WHEN business_impact_level IN (?, ?) THEN 1 ELSE 0 END) AS important_count,
+                    SUM(CASE WHEN business_impact_level = ? THEN 1 ELSE 0 END) AS urgent_count
                 FROM news_articles
                 WHERE substr(COALESCE(published_at, collected_at), 1, 10) >= ?
+                  AND review_status != ?
                 """,
-                (seven_days_ago,),
+                (IMPORTANT, IMMEDIATE, IMMEDIATE, seven_days_ago, NOISE),
             ).fetchone()
-            top_topic_row = connection.execute(
+            top_topic_rows = connection.execute(
                 """
                 SELECT topic_category, COUNT(*) AS count
                 FROM news_articles
                 WHERE substr(COALESCE(published_at, collected_at), 1, 10) >= ?
+                  AND review_status = ?
                 GROUP BY topic_category
                 ORDER BY count DESC, topic_category
-                LIMIT 1
+                LIMIT 5
                 """,
-                (seven_days_ago,),
-            ).fetchone()
+                (seven_days_ago, "ê´€ë ¨"),
+            ).fetchall()
         return {
             "recent_count": row["recent_count"] or 0,
             "important_count": row["important_count"] or 0,
             "urgent_count": row["urgent_count"] or 0,
-            "top_topic": top_topic_row["topic_category"] if top_topic_row else "-",
+            "top_topics": [
+                {"label": topic_row["topic_category"], "count": topic_row["count"]}
+                for topic_row in top_topic_rows
+            ],
         }
 
     def _load_articles(self, filters: NewsFilterParams) -> list[dict[str, Any]]:
@@ -158,6 +195,190 @@ class NewsDashboardService:
                 articles.append(item)
         return articles
 
+    def _group_articles(self, articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        clusters: list[list[dict[str, Any]]] = []
+
+        for article in articles:
+            matched_cluster: list[dict[str, Any]] | None = None
+            for cluster in clusters:
+                if any(self._are_related_articles(article, existing) for existing in cluster):
+                    matched_cluster = cluster
+                    break
+            if matched_cluster is None:
+                clusters.append([article])
+            else:
+                matched_cluster.append(article)
+
+        groups = [self._build_article_group(index, cluster) for index, cluster in enumerate(clusters, start=1)]
+        groups.sort(
+            key=lambda group: (
+                group["latest_published_at"] or "",
+                group["max_relevance_score"],
+                group["total_count"],
+            ),
+            reverse=True,
+        )
+        return groups
+
+    def _build_article_group(self, index: int, articles: list[dict[str, Any]]) -> dict[str, Any]:
+        sorted_articles = sorted(
+            articles,
+            key=lambda article: (
+                article.get("published_at") or article.get("collected_at") or "",
+                article.get("relevance_score", 0),
+                article.get("id", 0),
+            ),
+            reverse=True,
+        )
+        representative = sorted_articles[0]
+        matched_keywords = sorted({keyword for article in sorted_articles for keyword in article.get("matched_keywords", [])})
+        topic_categories = sorted({article.get("topic_category") or "-" for article in sorted_articles})
+        impact_levels = sorted(
+            {article.get("business_impact_level") or "-" for article in sorted_articles},
+            key=lambda value: (-IMPACT_PRIORITY.get(value, 0), value),
+        )
+        urgency_levels = sorted(
+            {article.get("urgency_level") or "-" for article in sorted_articles},
+            key=lambda value: (-URGENCY_PRIORITY.get(value, 0), value),
+        )
+        review_statuses = sorted(
+            {article.get("review_status") or UNREVIEWED for article in sorted_articles},
+            key=lambda value: (-REVIEW_PRIORITY.get(value, 0), value),
+        )
+        source_titles = sorted({article.get("source_title") or "-" for article in sorted_articles})
+        latest_published_at = max(
+            (article.get("published_at") or article.get("collected_at") or "" for article in sorted_articles),
+            default="",
+        )
+
+        return {
+            "group_id": f"news-group-{index}",
+            "display_title": representative["title"],
+            "related_count": max(len(sorted_articles) - 1, 0),
+            "total_count": len(sorted_articles),
+            "representative": representative,
+            "articles": sorted_articles,
+            "article_ids": [article["id"] for article in sorted_articles],
+            "latest_published_at": latest_published_at,
+            "matched_keywords": matched_keywords,
+            "topic_categories": topic_categories,
+            "business_impact_levels": impact_levels,
+            "urgency_levels": urgency_levels,
+            "review_statuses": review_statuses,
+            "primary_topic_category": representative.get("topic_category") or "-",
+            "primary_business_impact_level": impact_levels[0] if impact_levels else representative.get("business_impact_level") or "-",
+            "primary_urgency_level": urgency_levels[0] if urgency_levels else representative.get("urgency_level") or "-",
+            "primary_review_status": review_statuses[0] if review_statuses else representative.get("review_status") or UNREVIEWED,
+            "has_mixed_review_statuses": len(review_statuses) > 1,
+            "source_count": len(source_titles),
+            "max_relevance_score": max((article.get("relevance_score", 0) for article in sorted_articles), default=0),
+            "title_filter_values": sorted(
+                {
+                    value
+                    for article in sorted_articles
+                    for value in [article.get("title") or "-", article.get("source_title") or "-"]
+                }
+            ),
+        }
+
+    def _are_related_articles(self, left: dict[str, Any], right: dict[str, Any]) -> bool:
+        left_title = self._normalize_group_title(left.get("title"))
+        right_title = self._normalize_group_title(right.get("title"))
+        if not left_title or not right_title:
+            return False
+        if left_title == right_title:
+            return True
+        if (left_title in right_title or right_title in left_title) and min(len(left_title), len(right_title)) >= 12:
+            return True
+
+        left_tokens = self._title_tokens(left.get("title"))
+        right_tokens = self._title_tokens(right.get("title"))
+        if not left_tokens or not right_tokens:
+            return False
+
+        intersection = left_tokens & right_tokens
+        if not intersection:
+            return False
+
+        overlap_ratio = len(intersection) / min(len(left_tokens), len(right_tokens))
+        jaccard = len(intersection) / len(left_tokens | right_tokens)
+        title_char_jaccard = self._char_ngram_similarity(left.get("title"), right.get("title"))
+        same_keyword = bool(set(left.get("matched_keywords", [])) & set(right.get("matched_keywords", [])))
+        same_category = left.get("topic_category") == right.get("topic_category")
+        left_context_tokens = self._context_tokens(left)
+        right_context_tokens = self._context_tokens(right)
+        context_intersection = left_context_tokens & right_context_tokens
+        context_jaccard = (
+            len(context_intersection) / len(left_context_tokens | right_context_tokens)
+            if left_context_tokens and right_context_tokens
+            else 0.0
+        )
+        shared_salient_tokens = self._salient_tokens(left_context_tokens) & self._salient_tokens(right_context_tokens)
+
+        if overlap_ratio >= 0.8:
+            return True
+        if same_keyword and title_char_jaccard >= 0.48:
+            return True
+        if same_keyword and len(shared_salient_tokens) >= 3 and context_jaccard >= 0.28:
+            return True
+        if same_keyword and jaccard >= 0.5:
+            return True
+        if same_keyword and same_category and title_char_jaccard >= 0.35:
+            return True
+        if same_keyword and same_category and context_jaccard >= 0.38:
+            return True
+        if same_keyword and same_category and overlap_ratio >= 0.6:
+            return True
+        return False
+
+    def _normalize_group_title(self, title: str | None) -> str:
+        if not title:
+            return ""
+        cleaned = re.sub(r"[\[\]\(\)\"'â€œâ€â€˜â€™Â·,â€¦!?:;/\\|-]+", " ", title.lower())
+        return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _title_tokens(self, title: str | None) -> set[str]:
+        normalized = self._normalize_group_title(title)
+        tokens = {token for token in TITLE_TOKEN_RE.findall(normalized) if len(token) >= 2}
+        return {token for token in tokens if token not in NEWS_TITLE_STOPWORDS}
+
+    def _context_tokens(self, article: dict[str, Any]) -> set[str]:
+        normalized = self._normalize_group_title(
+            " ".join(
+                part
+                for part in [
+                    article.get("title") or "",
+                    article.get("summary") or "",
+                    " ".join(article.get("matched_keywords", [])),
+                ]
+                if part
+            )
+        )
+        tokens = {token for token in TITLE_TOKEN_RE.findall(normalized) if len(token) >= 2}
+        return {token for token in tokens if token not in NEWS_TITLE_STOPWORDS}
+
+    def _salient_tokens(self, tokens: set[str]) -> set[str]:
+        return {
+            token
+            for token in tokens
+            if len(token) >= 4 or any(character.isdigit() for character in token)
+        }
+
+    def _char_ngram_similarity(self, left_text: str | None, right_text: str | None, size: int = 3) -> float:
+        left_ngrams = self._char_ngrams(left_text, size=size)
+        right_ngrams = self._char_ngrams(right_text, size=size)
+        if not left_ngrams or not right_ngrams:
+            return 0.0
+        return len(left_ngrams & right_ngrams) / len(left_ngrams | right_ngrams)
+
+    def _char_ngrams(self, text: str | None, *, size: int) -> set[str]:
+        compact = re.sub(r"\s+", "", self._normalize_group_title(text))
+        if not compact:
+            return set()
+        if len(compact) <= size:
+            return {compact}
+        return {compact[index : index + size] for index in range(len(compact) - size + 1)}
+
     def _load_trend_data(self, filters: NewsFilterParams) -> dict[str, Any]:
         where_clause, params = self._where_clause(filters, apply_review_filter=False)
         recent_7_days = (date.today() - timedelta(days=6)).isoformat()
@@ -168,21 +389,23 @@ class NewsDashboardService:
                 f"""
                 SELECT topic_category, COUNT(*) AS count
                 FROM news_articles
-                WHERE substr(COALESCE(published_at, collected_at), 1, 10) >= ?{where_tail}
+                WHERE review_status != ?
+                  AND substr(COALESCE(published_at, collected_at), 1, 10) >= ?{where_tail}
                 GROUP BY topic_category
                 ORDER BY count DESC, topic_category
                 """,
-                [recent_7_days, *params],
+                [NOISE, recent_7_days, *params],
             ).fetchall()
             category_30 = connection.execute(
                 f"""
                 SELECT topic_category, COUNT(*) AS count
                 FROM news_articles
-                WHERE substr(COALESCE(published_at, collected_at), 1, 10) >= ?{where_tail}
+                WHERE review_status != ?
+                  AND substr(COALESCE(published_at, collected_at), 1, 10) >= ?{where_tail}
                 GROUP BY topic_category
                 ORDER BY count DESC, topic_category
                 """,
-                [recent_30_days, *params],
+                [NOISE, recent_30_days, *params],
             ).fetchall()
             keyword_rows = connection.execute(
                 f"""
@@ -191,11 +414,12 @@ class NewsDashboardService:
                     keyword,
                     COUNT(*) AS count
                 FROM news_articles
-                WHERE substr(COALESCE(published_at, collected_at), 1, 10) >= ?{where_tail}
+                WHERE review_status != ?
+                  AND substr(COALESCE(published_at, collected_at), 1, 10) >= ?{where_tail}
                 GROUP BY day, keyword
                 ORDER BY day, keyword
                 """,
-                [recent_30_days, *params],
+                [NOISE, recent_30_days, *params],
             ).fetchall()
         return {
             "category_7d": [{"label": row["topic_category"], "value": row["count"]} for row in category_7],
@@ -213,79 +437,46 @@ class NewsDashboardService:
                 SELECT topic_category, COUNT(*) AS count
                 FROM news_articles
                 WHERE substr(COALESCE(published_at, collected_at), 1, 10) >= ?{where_tail}
+                  AND review_status != ?
                 GROUP BY topic_category
                 ORDER BY count DESC, topic_category
                 LIMIT 3
                 """,
-                [seven_days_ago, *params],
+                [seven_days_ago, *params, NOISE],
             ).fetchall()
             urgent_rows = connection.execute(
                 f"""
-                SELECT title, owner_department, business_impact_level
+                SELECT title, owner_department, business_impact_level, review_status
                 FROM news_articles
-                WHERE business_impact_level IN ('ì¤‘ìš”', 'ì¦‰ì‹œì¡°ì¹˜'){where_tail}
-                ORDER BY relevance_score DESC, COALESCE(published_at, collected_at) DESC
+                WHERE business_impact_level IN (?, ?){where_tail}
+                  AND review_status != ?
+                ORDER BY CASE WHEN review_status = ? THEN 0 ELSE 1 END,
+                         relevance_score DESC,
+                         COALESCE(published_at, collected_at) DESC
                 LIMIT 3
                 """,
-                params,
+                [IMPORTANT, IMMEDIATE, *params, NOISE, "ê´€ë ¨"],
             ).fetchall()
+            feedback_summary = connection.execute(
+                f"""
+                SELECT
+                    SUM(CASE WHEN review_status = ? THEN 1 ELSE 0 END) AS relevant_count,
+                    SUM(CASE WHEN review_status = ? THEN 1 ELSE 0 END) AS noise_count
+                FROM news_articles
+                WHERE substr(COALESCE(published_at, collected_at), 1, 10) >= ?{where_tail}
+                """,
+                ["ê´€ë ¨", NOISE, seven_days_ago, *params],
+            ).fetchall()
+        feedback_counts = feedback_summary[0] if feedback_summary else {"relevant_count": 0, "noise_count": 0}
 
         key_trends = [
-            f"{row['topic_category']} ì´ìŠˆê°€ ìµœê·¼ 7ì¼ ê¸°ì¤€ {row['count']}ê±´ìœ¼ë¡œ ìƒìœ„ê¶Œì„ í˜•ì„±í–ˆìŠµë‹ˆë‹¤."
+            f"ìµœê·¼ 7ì¼ ë™ì•ˆ '{row['topic_category']}' ì´ìŠˆê°€ {row['count']}ê±´ìœ¼ë¡œ ê°€ìž¥ ë§Žì´ í¬ì°©ë˜ì—ˆìŠµë‹ˆë‹¤."
             for row in top_topics
-        ] or ["ìµœê·¼ 7ì¼ ê¸°ì¤€ ëˆ„ì ëœ ì‚°ì—… ë‰´ìŠ¤ê°€ ì•„ì§ ì—†ìŠµë‹ˆë‹¤."]
-
-        implications = [
-            f"{row['owner_department']} ì£¼ë„ë¡œ '{row['title']}'ì™€ ìœ ì‚¬í•œ ì´ìŠˆì˜ ì‚¬ì—… ì˜í–¥ ì—¬ë¶€ë¥¼ ì ê²€í•  í•„ìš”ê°€ ìžˆìŠµë‹ˆë‹¤."
-            for row in urgent_rows
-        ] or ["ê³ ì˜í–¥ ê¸°ì‚¬ ëˆ„ì  ì „ê¹Œì§€ëŠ” í‚¤ì›Œë“œ ì»¤ë²„ë¦¬ì§€ì™€ ìˆ˜ì§‘ ì•ˆì •ì„±ì„ ìš°ì„  ì ê²€í•˜ì„¸ìš”."]
-
-        recommended_tasks = [
-            "ì£¼ê°„ ê²½ì˜íšŒì˜ ì „ì— ì¤‘ìš”/ì¦‰ì‹œì¡°ì¹˜ ê¸°ì‚¬ì™€ ê·œì œ ì´ìŠˆë¥¼ í•¨ê»˜ ê²€í† í•´ ì‹¤í–‰ ìš°ì„ ìˆœìœ„ë¥¼ ë§žì¶”ì„¸ìš”.",
-            "í‚¤ì›Œë“œ ê´€ë¦¬ í™”ë©´ì—ì„œ ìž¡ìŒì´ ë§Žì€ ê²€ìƒ‰ì–´ëŠ” ë¹„í™œì„±í™”í•˜ê³  í’ˆëª©ë³„ ì„¸ë¶€ í‚¤ì›Œë“œë¥¼ ë³´ê°•í•˜ì„¸ìš”.",
-            "ê¸°ì‚¬ í”¼ë“œë°±ì„ ëˆ„ì í•´ ë¶„ë¥˜ì˜¤ë¥˜ íŒ¨í„´ì„ ë¶„ì„ ê·œì¹™ì— ë°˜ì˜í•˜ì„¸ìš”.",
-        ]
-        return {
-            "key_trends": key_trends[:3],
-            "implications": implications[:3],
-            "recommended_tasks": recommended_tasks,
-        }
-
-    def _load_operations(self) -> dict[str, Any]:
-        today = date.today().isoformat()
-        week_ago = (date.today() - timedelta(days=6)).isoformat()
-        with get_connection() as connection:
-            active_keyword_count = connection.execute(
-                "SELECT COUNT(*) FROM news_keywords WHERE is_active = 1"
-            ).fetchone()[0]
-            usage_today = connection.execute(
-                """
-                SELECT COUNT(*)
-                FROM news_collection_logs
-                WHERE substr(started_at, 1, 10) = ?
-                """,
-                (today,),
-            ).fetchone()[0]
-            error_count = connection.execute(
-                """
-                SELECT COUNT(*)
-                FROM news_collection_logs
-                WHERE substr(started_at, 1, 10) >= ?
-                  AND status = 'failed'
-                """,
-                (week_ago,),
-            ).fetchone()[0]
-            latest_logs = connection.execute(
-                """
-                SELECT *
-                FROM news_collection_logs
-                ORDER BY started_at DESC, id DESC
-                LIMIT 8
-                """
-            ).fetchall()
-        return {
-            "active_keyword_count": active_keyword_count,
-            "usage_today": usage_today,
-            "error_count": error_count,
-            "latest_logs": [dict(row) for row in latest_logs],
-        }
+        ] or ["ìµœê·¼ ê¸°ì‚¬ ìˆ˜ê°€ ì•„ì§ ì¶©ë¶„í•˜ì§€ ì•Šì•„ æ²js®‚ß¶Vpƒ¶V×².°ƒ¶*ã®‚3®Ns®–ðƒ²jS²V÷¶VcªâÀƒ²ZÓ®‚×²*×®.#®.¸‰t((€€€€€€€¥µÁ±¥…Ñ¥½¹Ì€ôl(€€€€€€€€€€€˜‰íÉ½Ýl½Ý¹•É}‘•Á…ÉÑµ•¹Ðu÷²^C²p€íÉ½ÝlÑ¥Ñ±”uôŸ²v`íÉ½Ýl‰ÕÍ¥¹•ÍÍ}¥µÁ…Ñ}±•Ù•°uôƒ²b¶Z”ƒ²^³®Ú®–ðƒ²jÃ²€ƒªÊ¶ƒ¶Vc²ã²jP¸ˆ(€€€€€€€€€€€™½ÈÉ½Ü¥¸ÕÉ•¹Ñ}É½ÝÌ(€€€€€€€t½Èl‹²’G²jS®>ƒ®K²v ƒªâÃ²
+³ªÂ ƒ®6Pƒ®"²‚®B€ƒ®V3ªæ3²ž ƒ¶
+“²n3®Npƒ®ÊS²r®–ðƒ®O¶b ƒ®ª£®.#¶Ã®ž²vƒ²vÓ²ZÓªÂ²ã²jP¸‰t((€€€€€€€É•½µµ•¹‘•‘}Ñ…Í­Ì€ômt(€€€€€€€¥˜€¡™••‘‰…­}½Õ¹ÑÍl‰É•±•Ù…¹Ñ}½Õ¹Ð‰t½È€À¤€ø€Àè(€€€€€€€€€€€É•½µµ•¹‘•‘}Ñ…Í­Ì¹…ÁÁ•¹ (€€€€€€€€€€€€€€€˜‹²ÖsªÞð€ß²vðƒ®>g²V ƒªÒ®‚£²ró®†pƒ¶fW²vã®BpƒªâÃ²
+°í™••‘‰…­}½Õ¹ÑÍlÉ•±•Ù…¹Ñ}½Õ¹Ðu÷ªÆÓ²v ƒ®Ú²s®Îƒ².“¶Z'ªÎ¶j7ªÎðƒ²ŽóªÂƒ®ÎÓªÎƒ²^@ƒ®Âc²b¶Vc²ã²jP¸ˆ(€€€€€€€€€€€€¤(€€€€€€€¥˜€¡™••‘‰…­}½Õ¹ÑÍl‰¹½¥Í•}½Õ¹Ð‰t½È€À¤€ø€Àè(€€€€€€€€€€€É•½µµ•¹‘•‘}Ñ…Í­Ì¹…ÁÁ•¹ (€€€€€€€€€€€€€€€˜‹²z‡²v3²ró®†pƒ®Ú®–c®BpƒªâÃ²
+°í™••‘‰…­}½Õ¹ÑÍl¹½¥Í•}½Õ¹Ðu÷ªÆÓ²v ƒ¶
+“²n3®Npƒ²rƒ²ž ƒ²^³®Ú²f ƒªÞã®ŽäƒªÞs²ædƒ²†Ã²‚Tƒ¶n®ÎÓ®†pƒªÊ¶ƒ¶Vc²ã²jP¸ˆ(€€€€€€€€€€€€¤(€€€€€€€É•½µµ•¹‘•‘}Ñ…Í­Ì¹•áÑ•¹ (€€€€€€€€€€€l(€€€€€€€€€€€€€€€€‹²ŽóªÂƒªÊ÷²b¶j3²v`ƒ²‚²^@ƒ²’G²jS
+ß²š'².s²†Ã²æ`ƒªâÃ²
+³®–ðƒ¶V£ªî`ƒªÊ¶ƒ¶Vc²ã²jP¸ˆ°(€€€€€€€€€€€€€€€€‹®"²‚®Bpƒ¶Ró®NpîÂÇ²vƒ®ÂS¶W²ró®†pƒ®Ú®–`ƒ®Â<ƒªÞã®ŽäƒªÞs²æg²vƒªÎ²4ƒ®ÎÓ²‚W¶Vc²ã²jP¸ˆ°(€€€€€€€€€€€t(€€€€€€€€¤(€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€‰­•å}ÑÉ•¹‘Ìˆè­•å}ÑÉ•¹‘ÍlèÍt°(€€€€€€€€€€€€‰¥µÁ±¥…Ñ¥½¹Ìˆè¥µÁ±¥…Ñ¥½¹ÍlèÍt°(€€€€€€€€€€€€‰É•½µµ•¹‘•‘}Ñ…Í­ÌˆèÉ•½µµ•¹‘•‘}Ñ…Í­ÍlèÍt°(€€€€€€€ô((€€€‘•˜}±½…‘}½Á•É…Ñ¥½¹Ì¡Í•±˜¤€´ø‘¥ÑmÍÑÈ°¹åtè(€€€€€€€Ñ½‘…ä€ô‘…Ñ”¹Ñ½‘…ä ¤¹¥Í½™½Éµ…Ð ¤(€€€€€€€Ý••­}…¼€ô€¡‘…Ñ”¹Ñ½‘…ä ¤€´Ñ¥µ•‘•±Ñ„¡‘…åÌôØ¤¤¹¥Í½™½Éµ…Ð ¤(€€€€€€€Ý¥Ñ •Ñ}½¹¹•Ñ¥½¸ ¤…Ì½¹¹•Ñ¥½¸è(€€€€€€€€€€€…Ñ¥Ù•}­•åÝ½É‘}½Õ¹Ð€ô½¹¹•Ñ¥½¸¹•á•ÕÑ” (€€€€€€€€€€€€€€€€‰M1P=U9P ¨¤I=4¹•ÝÍ}­•åÝ½É‘Ì]!I¥Í}…Ñ¥Ù”€ô€Äˆ(€€€€€€€€€€€€¤¹™•Ñ¡½¹” ¥lÁt(€€€€€€€€€€€ÕÍ…•}Ñ½‘…ä€ô½¹¹•Ñ¥½¸¹•á•ÕÑ” (€€€€€€€€€€€€€€€€ˆˆˆ(€€€€€€€€€€€€€€€M1P=U9P ¨¤(€€€€€€€€€€€€€€€I=4¹•ÝÍ}½±±•Ñ¥½¹}±½Ì(€€€€€€€€€€€€€€€]!IÍÕ‰ÍÑÈ¡ÍÑ…ÉÑ•‘}…Ð°€Ä°€ÄÀ¤€ô€ü(€€€€€€€€€€€€€€€€ˆˆˆ°(€€€€€€€€€€€€€€€€¡Ñ½‘…ä°¤°(€€€€€€€€€€€€¤¹™•Ñ¡½¹” ¥lÁt(€€€€€€€€€€€•ÉÉ½É}½Õ¹Ð€ô½¹¹•Ñ¥½¸¹•á•ÕÑ” (€€€€€€€€€€€€€€€€ˆˆˆ(€€€€€€€€€€€€€€€M1P=U9P ¨¤(€€€€€€€€€€€€€€€I=4¹•ÝÍ}½±±•Ñ¥½¹}±½Ì(€€€€€€€€€€€€€€€]!IÍÕ‰ÍÑÈ¡ÍÑ…ÉÑ•‘}…Ð°€Ä°€ÄÀ¤€øô€ü(€€€€€€€€€€€€€€€€€9ÍÑ…ÑÕÌ€ô€™…¥±•œ(€€€€€€€€€€€€€€€€ˆˆˆ°(€€€€€€€€€€€€€€€€¡Ý••­}…¼°¤°(€€€€€€€€€€€€¤¹™•Ñ¡½¹” ¥lÁt(€€€€€€€€€€€±…Ñ•ÍÑ}±½Ì€ô½¹¹•Ñ¥½¸¹•á•ÕÑ” (€€€€€€€€€€€€€€€€ˆˆˆ(€€€€€€€€€€€€€€€M1P€¨(€€€€€€€€€€€€€€€I=4¹•ÝÍ}½±±•Ñ¥½¹}±½Ì(€€€€€€€€€€€€€€€=IH	dÍÑ…ÉÑ•‘}…ÐM°¥M(€€€€€€€€€€€€€€€1%5%P€à(€€€€€€€€€€€€€€€€ˆˆˆ(€€€€€€€€€€€€¤¹™•Ñ¡…±° ¤(€€€€€€€É•ÑÕÉ¸ì(€€€€€€€€€€€€‰…Ñ¥Ù•}­•åÝ½É‘}½Õ¹Ðˆè…Ñ¥Ù•}­•åÝ½É‘}½Õ¹Ð°(€€€€€€€€€€€€‰ÕÍ…•}Ñ½‘…äˆèÕÍ…•}Ñ½‘…ä°(€€€€€€€€€€€€‰•ÉÉ½É}½Õ¹Ðˆè•ÉÉ½É}½Õ¹Ð°(€€€€€€€€€€€€‰±…Ñ•ÍÑ}±½Ìˆèm‘¥Ð¡É½Ü¤™½ÈÉ½Ü¥¸±…Ñ•ÍÑ}±½Ít°(€€€€€€€ô(

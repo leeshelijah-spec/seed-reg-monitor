@@ -12,9 +12,9 @@
 
 ```bash
 python scripts/log_feature_update.py ^
-  --title "읽기 전용 공유 흐름 추가" ^
-  --change "READ_ONLY_MODE와 읽기 전용 미들웨어를 추가" ^
-  --change "ngrok 공유 스크립트와 정책 예시를 정리" ^
+  --title "대시보드 실행 흐름 정리" ^
+  --change "시작 스크립트와 의존성 복구 흐름을 정리" ^
+  --change "대시보드 UI 변경과 필터 동작을 문서화" ^
   --change "README 최신 업데이트 요약을 동기화"
 ```
 

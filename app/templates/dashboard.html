@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Dashboard | Seed Regulation Monitor{% endblock %}
+{% block topbar_actions_extra %}
+<button class="ghost-button sync-button-compact" type="button" data-modal-target="newsOperationsModal">운영현황</button>
+{% endblock %}
 {% block content %}
 <section class="section-block">
   <div class="kpi-overview-grid">
@@ -7,36 +10,58 @@
       <div class="section-head compact-head">
         <div>
           <p class="eyebrow">Regulation</p>
-          <h3>규제 모니터링 현황</h3>
-          {% if latest_sync %}
-          <p class="section-meta">최근 규제 동기화: {{ latest_sync.finished_at or latest_sync.started_at }} / 상태: {{ latest_sync.status }}</p>
-          {% else %}
-          <p class="section-meta">아직 규제 동기화 이력이 없습니다. 상단 버튼으로 수동 실행할 수 있습니다.</p>
-          {% endif %}
+          <div class="tooltip-heading" tabindex="0">
+            <h3>규제 모니터링 현황</h3>
+            {% if latest_sync %}
+            <span class="hover-tooltip">최근 규제 동기화: {{ latest_sync.finished_at or latest_sync.started_at }} / 상태: {{ latest_sync.status }}</span>
+            {% else %}
+            <span class="hover-tooltip">아직 규제 동기화 이력이 없습니다. 상단 버튼으로 수동 실행할 수 있습니다.</span>
+            {% endif %}
+          </div>
         </div>
       </div>
 
-      <section class="stats-grid stats-grid-two-by-two stats-grid-compact">
-        <article class="stat-card stat-card-chart">
+      <section class="kpi-sidebar-layout">
+        <article class="stat-card stat-card-chart stat-card-span-rows">
           <div class="stat-head">
             <span>중요도 분포</span>
           </div>
-          <div class="chart-shell chart-shell-stat">
-            <canvas id="severityChart" height="160"></canvas>
+          <div class="distribution-summary">
+            <div class="distribution-section">
+              <p class="distribution-label">규제 중요도</p>
+              <div class="distribution-list">
+                {% for item in severity_distribution %}
+                <div class="distribution-item">
+                  <strong>{{ item.label }}</strong>
+                  <span>{{ item.value }}건</span>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="distribution-section">
+              <p class="distribution-label">검토 반영 현황</p>
+              <div class="distribution-list">
+                {% for item in review_status_summary %}
+                <div class="distribution-item">
+                  <strong>{{ item.label }}</strong>
+                  <span>{{ item.value }}건</span>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
           </div>
         </article>
-
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>오늘 신규 건수</span>
           <strong>{{ stats.today_new_count }}</strong>
         </article>
 
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>미검토 건수</span>
           <strong>{{ stats.unreviewed_count }}</strong>
         </article>
 
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>시행일 임박 건수</span>
           <strong>{{ stats.imminent_count }}</strong>
         </article>
@@ -47,34 +72,46 @@
       <div class="section-head compact-head">
         <div>
           <p class="eyebrow">News Trend</p>
-          <h3>네이버 뉴스 기반 산업 트렌드/대응 분석</h3>
-          {% if news_api_configured %}
-          <p class="section-meta">`.env.local`의 네이버 API 설정이 반영되어 뉴스 수집을 사용할 수 있습니다.</p>
-          {% else %}
-          <p class="section-meta">네이버 뉴스 수집은 `.env.local`에 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`를 설정한 뒤 활성화됩니다.</p>
-          {% endif %}
+          <div class="tooltip-heading" tabindex="0">
+            <h3>네이버 뉴스 기반 산업 트렌드/대응 분석</h3>
+            {% if news_api_configured %}
+            <span class="hover-tooltip">`.env.local`의 네이버 API 설정이 반영되어 뉴스 수집을 사용할 수 있습니다.</span>
+            {% else %}
+            <span class="hover-tooltip">네이버 뉴스 수집은 `.env.local`에 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`를 설정한 뒤 활성화됩니다.</span>
+            {% endif %}
+          </div>
         </div>
         <div class="section-actions">
           <button class="ghost-button section-toggle-button" type="button" data-toggle-target="newsToolsPanel" aria-expanded="false">필터</button>
         </div>
       </div>
 
-      <section class="stats-grid stats-grid-two-by-two stats-grid-compact">
-        <article class="stat-card">
+      <section class="kpi-sidebar-layout">
+        <article class="stat-card stat-card-topic-list stat-card-span-rows">
+          <span>가장 많이 언급된 주제 Top 5</span>
+          <div class="topic-rank-list">
+            {% for topic in news_dashboard.kpis.top_topics %}
+            <div class="topic-rank-item">
+              <strong>{{ loop.index }}.</strong>
+              <span>{{ topic.label }}</span>
+              <em>({{ topic.count }}건)</em>
+            </div>
+            {% else %}
+            <p class="topic-rank-empty">최근 7일 기준으로 집계된 주제가 없습니다.</p>
+            {% endfor %}
+          </div>
+        </article>
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>최근 7일 기사 수</span>
           <strong>{{ news_dashboard.kpis.recent_count }}</strong>
         </article>
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>중요 이상 기사</span>
           <strong>{{ news_dashboard.kpis.important_count }}</strong>
         </article>
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>즉시조치 기사</span>
           <strong>{{ news_dashboard.kpis.urgent_count }}</strong>
-        </article>
-        <article class="stat-card">
-          <span>가장 많이 언급된 주제</span>
-          <strong class="stat-label">{{ news_dashboard.kpis.top_topic }}</strong>
         </article>
       </section>
     </article>
@@ -145,9 +182,6 @@
         <div class="panel-head">
           <h3>관리자용 키워드 관리</h3>
         </div>
-        {% if settings.read_only_mode %}
-        <p class="section-meta">Read-only mode hides keyword management and article feedback controls.</p>
-        {% else %}
         <form action="/news/keywords" method="post" class="keyword-form">
           <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#newsToolsPanel">
           <label class="field-group">
@@ -179,7 +213,6 @@
           </div>
           {% endfor %}
         </div>
-        {% endif %}
       </div>
     </div>
   </section>
@@ -187,30 +220,33 @@
   <article class="panel wide analysis-shell">
     <div class="section-head">
       <div>
-        <p class="eyebrow">Operations & Analysis</p>
-        <h3>분석 및 운영 현황</h3>
+        <p class="eyebrow">Analysis</p>
+        <h3>분석 현황</h3>
       </div>
     </div>
 
-    <section class="content-grid content-grid-two content-grid-dashboard">
-      <article class="panel panel-half nested-panel">
-        <div class="panel-head">
-          <h3>카테고리별 기사 건수</h3>
-        </div>
-        <div class="chart-shell tall">
-          <canvas id="newsCategoryChart"></canvas>
-        </div>
-      </article>
+    <section class="analysis-layout">
+      <div class="analysis-chart-stack">
+        <article class="panel panel-half nested-panel">
+          <div class="panel-head">
+            <h3>카테고리별 기사 건수</h3>
+          </div>
+          <div class="chart-shell tall">
+            <canvas id="newsCategoryChart"></canvas>
+          </div>
+        </article>
 
-      <article class="panel panel-half nested-panel">
-        <div class="panel-head">
-          <h3>키워드별 언급 추이</h3>
-        </div>
-        <div class="chart-shell tall">
-          <canvas id="newsKeywordChart"></canvas>
-        </div>
-      </article>
-      <article class="panel panel-half nested-panel">
+        <article class="panel panel-half nested-panel">
+          <div class="panel-head">
+            <h3>키워드별 언급 추이</h3>
+          </div>
+          <div class="chart-shell tall">
+            <canvas id="newsKeywordChart"></canvas>
+          </div>
+        </article>
+      </div>
+
+      <article class="panel panel-half nested-panel analysis-summary-panel">
         <div class="panel-head">
           <h3>경영 요약 패널</h3>
         </div>
@@ -241,61 +277,69 @@
           </div>
         </div>
       </article>
-
-      <article class="panel panel-half nested-panel">
-        <div class="panel-head">
-          <h3>운영 현황</h3>
-        </div>
-        <div class="ops-stats">
-          <div class="ops-stat">
-            <span>활성 키워드</span>
-            <strong>{{ news_dashboard.operations.active_keyword_count }}</strong>
-          </div>
-          <div class="ops-stat">
-            <span>오늘 API 호출</span>
-            <strong>{{ news_dashboard.operations.usage_today }}</strong>
-          </div>
-          <div class="ops-stat">
-            <span>최근 7일 오류</span>
-            <strong>{{ news_dashboard.operations.error_count }}</strong>
-          </div>
-          <div class="ops-stat">
-            <span>API 상태</span>
-            <strong>{{ "Configured" if news_api_configured else "Pending" }}</strong>
-          </div>
-        </div>
-        <div class="table-wrap compact">
-          <table>
-            <thead>
-              <tr>
-                <th>시각</th>
-                <th>키워드</th>
-                <th>상태</th>
-                <th>수집/저장/중복</th>
-                <th>메시지</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for log in news_dashboard.operations.latest_logs %}
-              <tr>
-                <td>{{ log.started_at[:16] }}</td>
-                <td>{{ log.keyword }}</td>
-                <td>{{ log.status }}</td>
-                <td>{{ log.fetched_count }} / {{ log.inserted_count }} / {{ log.duplicate_count }}</td>
-                <td>{{ log.message }}</td>
-              </tr>
-              {% else %}
-              <tr>
-                <td colspan="5" class="empty-row">뉴스 수집 로그가 없습니다.</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </article>
     </section>
   </article>
 </section>
+
+<div id="newsOperationsModal" class="modal-backdrop hidden" data-modal-root aria-hidden="true">
+  <div class="modal-dialog modal-wide panel" role="dialog" aria-modal="true" aria-labelledby="newsOperationsModalTitle">
+    <div class="modal-header">
+      <div>
+        <p class="eyebrow">Operations</p>
+        <h3 id="newsOperationsModalTitle">운영 현황</h3>
+      </div>
+      <button class="ghost-button sync-button-compact" type="button" data-modal-close>닫기</button>
+    </div>
+
+    <div class="ops-stats">
+      <div class="ops-stat">
+        <span>활성 키워드</span>
+        <strong>{{ news_dashboard.operations.active_keyword_count }}</strong>
+      </div>
+      <div class="ops-stat">
+        <span>오늘 API 호출</span>
+        <strong>{{ news_dashboard.operations.usage_today }}</strong>
+      </div>
+      <div class="ops-stat">
+        <span>최근 7일 오류</span>
+        <strong>{{ news_dashboard.operations.error_count }}</strong>
+      </div>
+      <div class="ops-stat">
+        <span>API 상태</span>
+        <strong>{{ "Configured" if news_api_configured else "Pending" }}</strong>
+      </div>
+    </div>
+
+    <div class="table-wrap compact modal-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>시각</th>
+            <th>키워드</th>
+            <th>상태</th>
+            <th>수집/저장/중복</th>
+            <th>메시지</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in news_dashboard.operations.latest_logs %}
+          <tr>
+            <td>{{ log.started_at[:16] }}</td>
+            <td>{{ log.keyword }}</td>
+            <td>{{ log.status }}</td>
+            <td>{{ log.fetched_count }} / {{ log.inserted_count }} / {{ log.duplicate_count }}</td>
+            <td>{{ log.message }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" class="empty-row">뉴스 수집 로그가 없습니다.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <section class="section-block" id="regulation-review-list">
   <article class="panel wide">
@@ -305,8 +349,8 @@
         {{ "미검토만 보기" if show_all_regulations else "전체목록보기" }}
       </a>
     </div>
-    <div class="table-wrap">
-      <table>
+    <div class="table-wrap" data-filter-table-wrap>
+      <table data-filterable-table data-filter-empty-message="선택한 규제 항목이 없습니다.">
         <thead>
           <tr>
             <th>제목</th>
@@ -322,13 +366,13 @@
           {% for item in recent_regulations %}
           {% set action_class = "done" if item.action_status == "조치완료" else "progress" if item.action_status == "조치중" else "needed" if item.action_status == "조치필요" else "na" if item.action_status == "해당없음" else "unknown" %}
           <tr>
-            <td><a href="/regulations/{{ item.id }}">{{ item.title }}</a></td>
-            <td>{{ item.authority }}</td>
-            <td>{{ item.effective_date or "-" }}</td>
-            <td><span class="badge severity-{{ item.severity }}">{{ item.severity }}</span></td>
-            <td><span class="action-badge action-{{ action_class }}">{{ item.action_status }}</span></td>
-            <td>{{ item.category|join(", ") }}</td>
-            <td>{{ item.department|join(", ") }}</td>
+            <td data-filter-value="{{ item.title }}"><a href="/regulations/{{ item.id }}">{{ item.title }}</a></td>
+            <td data-filter-value="{{ item.authority }}">{{ item.authority }}</td>
+            <td data-filter-value="{{ item.effective_date or '-' }}">{{ item.effective_date or "-" }}</td>
+            <td data-filter-value="{{ item.severity }}"><span class="badge severity-{{ item.severity }}">{{ item.severity }}</span></td>
+            <td data-filter-value="{{ item.action_status }}"><span class="action-badge action-{{ action_class }}">{{ item.action_status }}</span></td>
+            <td data-filter-values="{{ item.category|join('||') }}">{{ item.category|join(", ") }}</td>
+            <td data-filter-values="{{ item.department|join('||') }}">{{ item.department|join(", ") }}</td>
           </tr>
           {% else %}
           <tr>
@@ -349,8 +393,8 @@
         {{ "미검토만 보기" if news_dashboard.filters.show_all_articles else "전체목록보기" }}
       </a>
     </div>
-    <div class="table-wrap">
-      <table>
+    <div class="table-wrap" data-filter-table-wrap>
+      <table data-filterable-table data-filter-empty-message="선택한 기사 항목이 없습니다.">
         <thead>
           <tr>
             <th>제목</th>
@@ -365,32 +409,83 @@
           </tr>
         </thead>
         <tbody>
-          {% for article in news_dashboard.articles %}
+          {% for kroup in news_dashboard.article_groups %}
           <tr>
-            <td>
-              <strong>{{ article.title }}</strong>
-              <p class="table-subtext">{{ article.source_title or "-" }} / 관련도 {{ article.relevance_score }}</p>
-            </td>
-            <td>{{ article.published_at[:10] if article.published_at else "-" }}</td>
-            <td>{{ article.matched_keywords|join(", ") }}</td>
-            <td>{{ article.topic_category }}</td>
-            <td><span class="badge impact-{{ article.business_impact_level }}">{{ article.business_impact_level }}</span></td>
-            <td><span class="badge urgency-{{ article.urgency_level }}">{{ article.urgency_level }}</span></td>
-            <td><pre class="inline-pre">{{ article.recommended_action }}</pre></td>
-            <td><a href="{{ article.original_link }}" target="_blank" rel="noreferrer">원문</a></td>
-            <td>
-              <span class="status-chip">{{ article.review_status }}</span>
-              {% if not settings.read_only_mode %}
-              <div class="feedback-actions">
-                {% for feedback_type in news_feedback_types %}
-                <form action="/news/{{ article.id }}/feedback" method="post">
-                  <input type="hidden" name="feedback_type" value="{{ feedback_type }}">
-                  <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#news-review-list">
-                  <button class="mini-button" type="submit">{{ feedback_type }}</button>
-                </form>
-                {% endfor %}
+            {% set article = group.representative %}
+            <td data-filter-values="{{ group.title_filter_values|join('||') }}">
+              <div class="news-group-heading">
+                <strong>{{ group.display_title }}</strong>
+                <span class="group-count-chip">외 {{ group.related_count }}건</span>
+                {% if group.total_count > 1 %}
+                <button class="mini-button group-toggle-button" type="button" data-news-group-toggle="{{ group.group_id }}" aria-expanded="false">확대</button>
+                {% endif %}
+              </div>
+              {% if group.total_count > 1 %}
+              <div class="news-group-detail hidden" data-news-group-detail="{{ group.group_id }}">
+                <div class="news-group-detail-list">
+                  {% for related_article in group.articles %}
+                  <article class="news-group-detail-item">
+                    <div class="news-group-detail-head">
+                      <strong>{{ related_article.title }}</strong>
+                      <span class="status-chip">{{ related_article.review_status }}</span>
+                    </div>
+                    <p class="table-subtext">{{ related_article.source_title or "-" }} / {{ related_article.published_at[:16] if related_article.published_at else "-" }} / 키워드 {{ related_article.matched_keywords|join(", ") }}</p>
+                    <div class="news-group-detail-actions">
+                      <a class="ghost-button detail-link-button" href="{{ related_article.original_link }}" target="_blank" rel="noreferrer">원문</a>
+                      <form class="feedback-form-inline" action="/news/{{ related_article.id }}/feedback" method="post" data-feedback-form>
+                        <select class="form-control form-control-compact" name="impact_level">
+                          {% for value, label in news_impact_options %}
+                          <option value="{{ value }}" {% if value == related_article.business_impact_level %}selected{% endif %}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                        <select class="form-control form-control-compact" name="urgency_level">
+                          {% for value, label in news_urgency_options %}
+                          <option value="{{ value }}" {% if value == related_article.urgency_level %}selected{% endif %}>{{ label }}</option>
+                          {% endfor %}
+                        </select>
+                        <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#news-review-list">
+                        <div class="feedback-actions">
+                          <button class="mini-button" type="submit" name="feedback_action" value="relevant">관련</button>
+                          <button class="mini-button" type="submit" name="feedback_action" value="noise">잡음</button>
+                        </div>
+                      </form>
+                    </div>
+                  </article>
+                  {% endfor %}
+                </div>
               </div>
               {% endif %}
+              <p class="table-subtext">{{ article.source_title or "-" }} / 관련도 {{ article.relevance_score }}</p>
+            </td>
+            <td data-filter-value="{{ article.published_at[:10] if article.published_at else '-' }}">{{ article.published_at[:10] if article.published_at else "-" }}</td>
+            <td data-filter-values="{{ group.matched_keywords|join('||') }}">{{ group.matched_keywords|join(", ") }}</td>
+            <td data-filter-values="{{ group.topic_categories|join('||') }}">{{ group.primary_topic_category }}</td>
+            <td data-filter-values="{{ group.business_impact_levels|join('||') }}"><span class="badge impact-{{ group.primary_business_impact_level }}">{{ group.primary_business_impact_level }}</span></td>
+            <td data-filter-values="{{ group.urgency_levels|join('||') }}"><span class="badge urgency-{{ group.primary_urgency_level }}">{{ group.primary_urgency_level }}</span></td>
+            <td data-filter-value="{{ article.recommended_action|replace('\r', ' ')|replace('\n', ' ') }}"><pre class="inline-pre">{{ article.recommended_action }}</pre></td>
+            <td data-filter-value="{{ article.original_link }}"><a href="{{ article.original_link }}" target="_blank" rel="noreferrer">원문</a></td>
+            <td data-filter-values="{{ group.review_statuses|join('||') }}">
+              <span class="status-chip">{{ "혼합" if group.has_mixed_review_statuses else group.primary_review_status }}</span>
+              <form class="feedback-form-inline feedback-form-group" action="/news/feedback/bulk" method="post" data-feedback-form>
+                <select class="form-control form-control-compact" name="impact_level">
+                  {% for value, label in news_impact_options %}
+                  <option value="{{ value }}" {% if value == group.primary_business_impact_level %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                <select class="form-control form-control-compact" name="urgency_level">
+                  {% for value, label in news_urgency_options %}
+                  <option value="{{ value }}" {% if value == group.primary_urgency_level %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                {% for article_id in group.article_ids %}
+                <input type="hidden" name="article_ids" value="{{ article_id }}">
+                {% endfor %}
+                <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#news-review-list">
+                <div class="feedback-actions">
+                  <button class="mini-button" type="submit" name="feedback_action" value="relevant">관련</button>
+                  <button class="mini-button" type="submit" name="feedback_action" value="noise">잡음</button>
+                </div>
+              </form>
             </td>
           </tr>
           {% else %}
@@ -422,33 +517,329 @@
     });
   });
 
-  const severityData = {{ severity_distribution|tojson }};
-  const severityCtx = document.getElementById("severityChart");
-  new Chart(severityCtx, {
-    type: "doughnut",
-    data: {
-      labels: severityData.map((item) => item.label),
-      datasets: [{
-        data: severityData.map((item) => item.value),
-        backgroundColor: ["#006f36", "#00984b", "#42b772", "#b8dec8"],
-        borderWidth: 0
-      }]
-    },
-    options: {
-      maintainAspectRatio: false,
-      cutout: "64%",
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            boxWidth: 10,
-            color: "#22543d",
-            padding: 14
-          }
-        }
+  const setModalState = (modal, isOpen) => {
+    modal.classList.toggle("hidden", !isOpen);
+    modal.setAttribute("aria-hidden", isOpen ? "false" : "true");
+    document.body.classList.toggle("modal-open", isOpen);
+  };
+
+  document.querySelectorAll("[data-modal-target]").forEach((button) => {
+    const modal = document.getElementById(button.dataset.modalTarget);
+    if (!modal) {
+      return;
+    }
+
+    button.addEventListener("click", () => setModalState(modal, true));
+  });
+
+  document.querySelectorAll("[data-modal-root]").forEach((modal) => {
+    modal.querySelectorAll("[data-modal-close]").forEach((button) => {
+      button.addEventListener("click", () => setModalState(modal, false));
+    });
+
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        setModalState(modal, false);
       }
+    });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    document.querySelectorAll("[data-modal-root]").forEach((modal) => {
+      if (!modal.classList.contains("hidden")) {
+        setModalState(modal, false);
+      }
+    });
+  });
+
+  const FILTER_EMPTY_LABEL = "(값 없음)";
+  document.querySelectorAll("[data-news-group-toggle]").forEach((button) => {
+    const detail = document.querySelector(`[data-news-group-detail="${button.dataset.newsGroupToggle}"]`);
+    if (!detail) {
+      return;
+    }
+
+    button.addEventListener("click", () => {
+      const isOpen = !detail.classList.contains("hidden");
+      detail.classList.toggle("hidden", isOpen);
+      button.setAttribute("aria-expanded", isOpen ? "false" : "true");
+      button.textContent = isOpen ? "확대" : "접기";
+    });
+  });
+
+  const filterPopover = document.createElement("div");
+  filterPopover.className = "table-filter-popover hidden";
+  filterPopover.innerHTML = `
+    <div class="table-filter-header">
+      <p class="table-filter-title"></p>
+      <button class="table-filter-action" type="button" data-filter-close>닫기</button>
+    </div>
+    <input class="table-filter-search" type="search" placeholder="항목 검색">
+    <div class="table-filter-actions">
+      <button class="table-filter-action" type="button" data-filter-select-all>전체선택</button>
+      <button class="table-filter-action" type="button" data-filter-clear>전체해제</button>
+    </div>
+    <div class="table-filter-options"></div>
+    <p class="table-filter-empty-state hidden">표시할 선택 항목이 없습니다.</p>
+  `;
+  document.body.appendChild(filterPopover);
+
+  let activeFilterState = null;
+
+  const normalizeFilterValue = (value) => {
+    const normalized = `${value ?? ""}`.replace(/\s+/g, " ").trim();
+    return normalized || FILTER_EMPTY_LABEL;
+  };
+
+  const extractCellFilterValues = (cell) => {
+    if (cell.dataset.filterValues) {
+      return cell.dataset.filterValues
+        .split("||")
+        .map((value) => normalizeFilterValue(value))
+        .filter((value, index, values) => values.indexOf(value) === index);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(cell.dataset, "filterValue")) {
+      return [normalizeFilterValue(cell.dataset.filterValue)];
+    }
+
+    return [normalizeFilterValue(cell.textContent)];
+  };
+
+  const closeFilterPopover = () => {
+    filterPopover.classList.add("hidden");
+    activeFilterState = null;
+  };
+
+  const positionFilterPopover = (button) => {
+    const rect = button.getBoundingClientRect();
+    const popoverRect = filterPopover.getBoundingClientRect();
+    const margin = 12;
+    let left = rect.left;
+    let top = rect.bottom + 8;
+
+    if (left + popoverRect.width > window.innerWidth - margin) {
+      left = window.innerWidth - popoverRect.width - margin;
+    }
+    if (left < margin) {
+      left = margin;
+    }
+
+    if (top + popoverRect.height > window.innerHeight - margin) {
+      top = Math.max(margin, rect.top - popoverRect.height - 8);
+    }
+
+    filterPopover.style.left = `${left}px`;
+    filterPopover.style.top = `${top}px`;
+  };
+
+  const updateFilterTrigger = (context, columnIndex) => {
+    const meta = context.columns[columnIndex];
+    const badge = meta.button.querySelector(".filter-count-badge");
+    const selectedCount = context.selected[columnIndex].size;
+    const totalCount = meta.options.length;
+    const isFiltered = selectedCount !== totalCount;
+
+    meta.button.classList.toggle("active", isFiltered);
+    badge.textContent = `${selectedCount}/${totalCount}`;
+    badge.classList.toggle("hidden", !isFiltered);
+  };
+
+  const applyTableFilters = (context) => {
+    let visibleCount = 0;
+
+    context.rows.forEach((row, rowIndex) => {
+      const isVisible = context.selected.every((selectedValues, columnIndex) => {
+        const rowValues = context.rowValues[rowIndex][columnIndex];
+        return rowValues.some((value) => selectedValues.has(value));
+      });
+
+      row.classList.toggle("filtered-out", !isVisible);
+      if (isVisible) {
+        visibleCount += 1;
+      }
+    });
+
+    context.emptyState.classList.toggle("hidden", visibleCount > 0);
+    context.columns.forEach((_, columnIndex) => updateFilterTrigger(context, columnIndex));
+  };
+
+  const renderFilterOptions = (context, columnIndex, searchTerm = "") => {
+    const optionsContainer = filterPopover.querySelector(".table-filter-options");
+    const emptyState = filterPopover.querySelector(".table-filter-empty-state");
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const column = context.columns[columnIndex];
+    const visibleOptions = column.options.filter((option) => option.toLowerCase().includes(normalizedSearch));
+
+    optionsContainer.innerHTML = "";
+
+    if (!visibleOptions.length) {
+      emptyState.classList.remove("hidden");
+      return;
+    }
+
+    emptyState.classList.add("hidden");
+
+    visibleOptions.forEach((option, optionIndex) => {
+      const optionId = `filter-${context.id}-${columnIndex}-${optionIndex}`;
+      const label = document.createElement("label");
+      label.className = "table-filter-option";
+      label.setAttribute("for", optionId);
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = optionId;
+      checkbox.checked = context.selected[columnIndex].has(option);
+      checkbox.addEventListener("change", () => {
+        if (checkbox.checked) {
+          context.selected[columnIndex].add(option);
+        }
+        else {
+          context.selected[columnIndex].delete(option);
+        }
+
+        applyTableFilters(context);
+      });
+
+      const text = document.createElement("span");
+      text.textContent = option;
+
+      label.append(checkbox, text);
+      optionsContainer.appendChild(label);
+    });
+  };
+
+  const openFilterPopover = (context, columnIndex, button) => {
+    if (
+      activeFilterState &&
+      activeFilterState.context === context &&
+      activeFilterState.columnIndex === columnIndex &&
+      !filterPopover.classList.contains("hidden")
+    ) {
+      closeFilterPopover();
+      return;
+    }
+
+    activeFilterState = { context, columnIndex, button };
+
+    filterPopover.querySelector(".table-filter-title").textContent = `${context.columns[columnIndex].label} 필터`;
+    filterPopover.querySelector(".table-filter-search").value = "";
+    renderFilterOptions(context, columnIndex);
+    filterPopover.classList.remove("hidden");
+    positionFilterPopover(button);
+  };
+
+  document.querySelectorAll("[data-filterable-table]").forEach((table, tableIndex) => {
+    const rows = [...table.tBodies[0].rows].filter((row) => !row.querySelector(".empty-row"));
+    if (!rows.length) {
+      return;
+    }
+
+    const wrap = table.closest("[data-filter-table-wrap]") || table.parentElement;
+    const emptyState = document.createElement("p");
+    emptyState.className = "filter-result-empty hidden";
+    emptyState.textContent = table.dataset.filterEmptyMessage || "선택한 항목이 없습니다.";
+    wrap.appendChild(emptyState);
+
+    const headers = [...table.tHead.rows[0].cells];
+    const rowValues = rows.map((row) => [...row.cells].map((cell) => extractCellFilterValues(cell)));
+    const columns = headers.map((header, columnIndex) => {
+      const optionSet = new Set(rowValues.flatMap((values) => values[columnIndex]));
+      const options = [...optionSet].sort((left, right) => left.localeCompare(right, "ko"));
+      const label = header.textContent.trim();
+
+      header.classList.add("filterable-header");
+      header.textContent = "";
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "column-filter-trigger";
+      button.innerHTML = `<span>${label}</span><span class="filter-count-badge hidden"></span>`;
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openFilterPopover(context, columnIndex, button);
+      });
+
+      header.appendChild(button);
+
+      return { label, options, button };
+    });
+
+    const context = {
+      id: tableIndex,
+      rows,
+      rowValues,
+      columns,
+      selected: columns.map((column) => new Set(column.options)),
+      emptyState,
+    };
+
+    applyTableFilters(context);
+  });
+
+  filterPopover.querySelector("[data-filter-close]").addEventListener("click", closeFilterPopover);
+
+  filterPopover.querySelector("[data-filter-select-all]").addEventListener("click", () => {
+    if (!activeFilterState) {
+      return;
+    }
+
+    const { context, columnIndex } = activeFilterState;
+    context.selected[columnIndex] = new Set(context.columns[columnIndex].options);
+    applyTableFilters(context);
+    renderFilterOptions(context, columnIndex, filterPopover.querySelector(".table-filter-search").value);
+    positionFilterPopover(activeFilterState.button);
+  });
+
+  filterPopover.querySelector("[data-filter-clear]").addEventListener("click", () => {
+    if (!activeFilterState) {
+      return;
+    }
+
+    const { context, columnIndex } = activeFilterState;
+    context.selected[columnIndex] = new Set();
+    applyTableFilters(context);
+    renderFilterOptions(context, columnIndex, filterPopover.querySelector(".table-filter-search").value);
+    positionFilterPopover(activeFilterState.button);
+  });
+
+  filterPopover.querySelector(".table-filter-search").addEventListener("input", (event) => {
+    if (!activeFilterState) {
+      return;
+    }
+
+    renderFilterOptions(activeFilterState.context, activeFilterState.columnIndex, event.target.value);
+    positionFilterPopover(activeFilterState.button);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (filterPopover.classList.contains("hidden")) {
+      return;
+    }
+
+    if (filterPopover.contains(event.target)) {
+      return;
+    }
+
+    if (activeFilterState?.button?.contains(event.target)) {
+      return;
+    }
+
+    closeFilterPopover();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !filterPopover.classList.contains("hidden")) {
+      closeFilterPopover();
     }
   });
+
+  window.addEventListener("resize", closeFilterPopover);
+  document.addEventListener("scroll", closeFilterPopover, true);
 
   const category7 = {{ news_dashboard.trend.category_7d|tojson }};
   const category30 = {{ news_dashboard.trend.category_30d|tojson }};

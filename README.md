@@ -17,6 +17,8 @@ Seed Regulation Monitor is a FastAPI dashboard for monitoring seed-industry regu
 - Record action status and review notes
 - Collect, deduplicate, and analyze Naver news for seed-industry trends
 - Capture article feedback, keyword management, and collection logs
+- Filter unreviewed regulation/article tables by column with checkbox-driven pick lists
+- Open news operations status from a topbar modal while keeping analysis panels focused
 - Track updates through dated feature updates
 
 ## Stack
@@ -45,13 +47,11 @@ tests/
 
 ## Latest Update
 
-- Latest update: [2026-04-02](docs/feature-updates/2026-04-02.md)
-- Added the Naver-news ingestion, analysis, dashboard, and sample-data workflow
-- Reworked the dashboard into compact 2x2 KPI grids with a toggle-based news filter panel
-- Reorganized the review area around unreviewed regulations and articles
-- Added read-only dashboard and ngrok sharing flows for external viewing without write access
-- Added an edit-mode launcher, favicon serving, and safer local startup defaults
-- Fixed regulation sync to auto-discover a valid `korean-law-mcp` build when the configured relative path is missing
+- Latest update: [2026-04-06](docs/feature-updates/2026-04-06.md)
+- Removed the read-only/ngrok sharing flow and returned the app to a single editable dashboard mode
+- Simplified templates and request handling by dropping read-only write-blocking branches
+- Reworked the startup Python resolver to recreate `.venv` from a launchable base Python when needed
+- Kept the one-time post-start sync, KPI tooltips, operations modal, and per-column review-table filters
 
 ## Quick Start
 
@@ -135,39 +135,28 @@ If you are not in an activated virtual environment, prefer `.venv\Scripts\python
 - Dashboard: [http://127.0.0.1:8010/](http://127.0.0.1:8010/)
 - Health check: [http://127.0.0.1:8010/health](http://127.0.0.1:8010/health)
 
-## Read-Only Sharing
-
-Use read-only mode when you want to share the dashboard externally without exposing sync, review, keyword, or feedback actions.
-
-1. Set `READ_ONLY_MODE=true` in `.env.local`, or use the helper script below.
-2. Start the dashboard in read-only mode:
-
-```bash
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_readonly_dashboard.ps1
-```
-
-3. Start ngrok in read-only mode:
-
-```bash
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_ngrok_readonly_share.ps1 -DisableBasicAuth
-```
-
-If you want basic auth on top of read-only mode, omit `-DisableBasicAuth`.
-
-The ngrok helper writes a local-only policy file at `config/ngrok-readonly-policy.local.yml` and uses `.tools/ngrok/ngrok.exe` when available.
-
 ## Edit Mode
 
-Use edit mode when you want sync, review, keyword, and feedback actions enabled.
+Use the launcher below to run the dashboard with sync, review, keyword, and feedback actions enabled.
 
-1. Set `READ_ONLY_MODE=false` in `.env.local`, or use the helper script below.
-2. Start the dashboard in edit mode:
+1. Start the dashboard:
 
 ```bash
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_dashboard.ps1
 ```
 
 Windows users can also double-click `start_dashboard.cmd` from the repository root.
+
+If `.venv` is missing or broken, the launcher now tries to recreate it from a launchable base Python and reinstall `requirements.txt` automatically before starting the app.
+
+If PowerShell still cannot find Python after a reinstall, set `PYTHON_EXE` explicitly for the launch session:
+
+```powershell
+$env:PYTHON_EXE = "C:\Path\To\python.exe"
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_dashboard.ps1
+```
+
+When startup finishes, the launcher also runs one one-time `app.manual_sync` pass so regulation sync and Naver-news collection each execute once right after `Application startup complete`.
 
 ## Manual Sync
 
@@ -208,7 +197,7 @@ Feature update conventions are documented in [docs/feature-updates/README.md](do
 
 ## Notes
 
-- `.env`, `.env.local`, `config/news-keywords.json`, `config/ngrok-readonly-policy.local.yml`, and `data/*.db` are gitignored.
+- `.env`, `.env.local`, `config/news-keywords.json`, and `data/*.db` are gitignored.
 - News deduplication is based on `originallink` via `duplicate_hash`.
 - When the same article is matched by multiple keywords, they are merged into `matched_keywords`.
 
