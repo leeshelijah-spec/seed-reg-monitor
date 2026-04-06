@@ -6,9 +6,9 @@ from typing import Any
 from ..database import get_connection
 
 
-UNREVIEWED_STATUS = "\ubbf8\uac80\ud1a0"
-RELEVANT_STATUS = "\uad00\ub828"
-NOISE_STATUS = "\uc7a1\uc74c"
+UNREVIEWED_STATUS = "미검토"
+RELEVANT_STATUS = "관련"
+NOISE_STATUS = "잡음"
 
 
 @dataclass
@@ -16,6 +16,7 @@ class FeedbackReuseResult:
     review_status: str | None
     impact_level: str | None
     urgency_level: str | None
+    comment: str | None
     is_relevant: bool
     is_noise: bool
     match_count: int
@@ -29,6 +30,7 @@ class FeedbackReuseResult:
             "review_status": self.review_status,
             "impact_level": self.impact_level,
             "urgency_level": self.urgency_level,
+            "comment": self.comment,
             "is_relevant": self.is_relevant,
             "is_noise": self.is_noise,
             "match_count": self.match_count,
@@ -45,6 +47,7 @@ class NewsFeedbackLearningService:
                 review_status=None,
                 impact_level=None,
                 urgency_level=None,
+                comment=None,
                 is_relevant=False,
                 is_noise=False,
                 match_count=0,
@@ -63,6 +66,7 @@ class NewsFeedbackLearningService:
                     nf.is_noise,
                     nf.impact_level,
                     nf.urgency_level,
+                    nf.comment,
                     nf.created_at
                 FROM news_feedback nf
                 JOIN news_articles na ON na.id = nf.article_id
@@ -78,6 +82,7 @@ class NewsFeedbackLearningService:
                 review_status=None,
                 impact_level=None,
                 urgency_level=None,
+                comment=None,
                 is_relevant=False,
                 is_noise=False,
                 match_count=0,
@@ -106,6 +111,7 @@ class NewsFeedbackLearningService:
             review_status=review_status,
             impact_level=latest["impact_level"],
             urgency_level=latest["urgency_level"],
+            comment=latest["comment"],
             is_relevant=bool(latest["is_relevant"]),
             is_noise=bool(latest["is_noise"]),
             match_count=len(rows),

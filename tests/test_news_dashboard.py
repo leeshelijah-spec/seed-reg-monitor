@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.services.news_dashboard import NewsDashboardService
+from app.services.news_dashboard import NewsDashboardService, NewsFilterParams
 
 
 def _article(
@@ -118,6 +118,22 @@ class NewsDashboardGroupingTest(unittest.TestCase):
         grouped = groups[0]
         self.assertEqual(set(grouped["article_ids"]), {10, 11})
         self.assertEqual(grouped["related_count"], 1)
+
+    def test_executive_summary_is_rendered_in_korean(self) -> None:
+        service = NewsDashboardService()
+        summary = service._build_executive_summary(NewsFilterParams())
+
+        self.assertTrue(summary["key_trends"])
+        self.assertTrue(summary["implications"])
+        self.assertTrue(summary["recommended_tasks"])
+
+        for item in summary["key_trends"]:
+            self.assertNotIn("issue led the last 7 days", item)
+            self.assertIn("최근", item)
+
+        for item in summary["recommended_tasks"]:
+            self.assertNotIn("Review important and urgent articles together", item)
+            self.assertRegex(item, r"[가-힣]")
 
 
 if __name__ == "__main__":

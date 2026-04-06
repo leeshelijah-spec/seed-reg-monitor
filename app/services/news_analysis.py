@@ -41,6 +41,10 @@ SEED_BUSINESS_TERMS = [
     "수출",
     "수입",
 ]
+UNREVIEWED_STATUS = "미검토"
+RELEVANT_STATUS = "관련"
+NOISE_STATUS = "잡음"
+URGENCY_LABELS = {"high": "높음", "medium": "보통", "low": "낮음"}
 
 
 @dataclass
@@ -139,6 +143,39 @@ class NewsAnalysisService:
             lines.append("필요 시 경영진 보고 안건으로 상정하고 이번 주 실행 과제를 확정하세요.")
         else:
             lines.append("추가 기사 추이를 모니터링하며 주간 보고서에 반영하세요.")
+        return "\n".join(lines)
+
+    def apply_feedback_to_action(
+        self,
+        *,
+        base_action: str,
+        review_status: str,
+        owner_department: str,
+        impact_level: str,
+        urgency_level: str,
+        comment: str | None = None,
+    ) -> str:
+        if not review_status or review_status == UNREVIEWED_STATUS:
+            return base_action
+
+        lines: list[str] = []
+        if review_status == NOISE_STATUS:
+            lines.append("잡음으로 분류된 기사입니다. 대시보드 분석 집계와 보고 대상에서 제외하고 키워드 유지 여부를 재검토하세요.")
+        elif review_status == RELEVANT_STATUS:
+            lines.append(
+                f"{owner_department}에서 관련 기사로 확인했습니다. 영향도 {impact_level}, 긴급도 {URGENCY_LABELS.get(urgency_level, urgency_level)} 기준으로 대응 우선순위를 반영하세요."
+            )
+        else:
+            lines.append(f"{owner_department}에서 검토 결과({review_status})를 반영해 후속 조치 필요 여부를 다시 정리하세요.")
+
+        if comment:
+            lines.append(f"피드백 조치사항: {comment}")
+
+        for line in (base_action or "").splitlines():
+            normalized = line.strip()
+            if normalized and normalized not in lines:
+                lines.append(normalized)
+
         return "\n".join(lines)
 
     def _llm_trace(self) -> dict[str, Any]:

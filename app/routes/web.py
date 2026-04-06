@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from ..config import settings
 from ..database import get_connection, row_to_regulation
 from ..services.ingestion import IngestionService
+from ..services.news_analysis import NewsAnalysisService
 from ..services.news_dashboard import NewsDashboardService, NewsFilterParams
 from ..services.news_ingestion import NewsIngestionService
 from ..services.news_keywords import NewsKeywordService
@@ -109,6 +110,26 @@ def _load_regulation_dashboard(show_all: bool = False) -> dict:
         severity_rows = connection.execute(
             "SELECT severity, COUNT(*) AS count FROM regulations GROUP BY severity ORDER BY count DESC"
         ).fetchall()
+        review_status_rows = connection.execute(
+            f"""
+            SELECT
+                COALESCE(
+                    (
+                        SELECT rl.status
+                        FROM review_logs rl
+                        WHERE rl.regulation_id = r.id
+                        ORDER BY rl.updated_at DESC, rl.rowid DESC
+                        LIMIT 1
+                    ),
+                    ?
+                ) AS action_status,
+                COUNT(*) AS count
+            FROM regulations r
+            GROUP BY action_status
+            ORDER BY count DESC, action_status
+            """,
+            (REVIEW_UNKNOWN,),
+        ).fetchall()
         recent_sql = """
             SELECT
                 r.*,
@@ -156,6 +177,9 @@ def _load_regulation_dashboard(show_all: bool = False) -> dict:
         "severity_distribution": [
             {"label": row["severity"], "value": row["count"]} for row in severity_rows
         ],
+        "review_status_summary": [
+            {"label": row["action_status"], "value": row["count"]} for row in review_status_rows
+        ],
         "recent_regulations": recent_regulations,
         "show_all_regulations": show_all,
         "latest_sync": dict(latest_sync) if latest_sync else None,
@@ -200,6 +224,21 @@ def _derive_feedback_payload(
     }
 
 
+def _parse_feedback_flags(raw_form: dict[str, list[str]]) -> tuple[bool, bool]:
+    feedback_action = raw_form.get("feedback_action", [""])[0].strip()
+    if feedback_action == "relevant":
+        return True, False
+    if feedback_action == "noise":
+        return False, True
+    if feedback_action:
+        raise HTTPException(status_code=400, detail="Invalid feedback action")
+
+    return (
+        raw_form.get("is_relevant", [""])[0].strip() == "1",
+        raw_form.get("is_noise", [""])[0].strip() == "1",
+    )
+
+
 def _record_news_feedback_for_articles(
     *,
     article_ids: list[int],
@@ -222,17 +261,33 @@ def _record_news_feedback_for_articles(
     unique_article_ids = list(dict.fromkeys(article_ids))
     placeholders = ",".join("?" for _ in unique_article_ids)
     created_at = now_iso()
+    analyzer = NewsAnalysisService()
 
     with get_connection() as connection:
         existing_rows = connection.execute(
-            f"SELECT id FROM news_articles WHERE id IN ({placeholders})",
+            f"SELECT * FROM news_articles WHERE id IN ({placeholders})",
             unique_article_ids,
         ).fetchall()
-        existing_ids = {row["id"] for row in existing_rows}
+        existing_articles = {
+            row["id"]: row
+            for row in existing_rows
+        }
 
         for article_id in unique_article_ids:
-            if article_id not in existing_ids:
+            if article_id not in existing_articles:
                 raise HTTPException(status_code=404, detail="Article not found")
+
+            article = dict(existing_articles[article_id])
+            updated_impact_level = payload["impact_level"] or article.get("business_impact_level") or "참고"
+            updated_urgency_level = payload["urgency_level"] or article.get("urgency_level") or "low"
+            updated_recommended_action = analyzer.apply_feedback_to_action(
+                base_action=article.get("recommended_action") or "",
+                review_status=str(payload["review_status"]),
+                owner_department=article.get("owner_department") or "경영기획",
+                impact_level=str(updated_impact_level),
+                urgency_level=str(updated_urgency_level),
+                comment=str(payload["comment"]) if payload["comment"] else None,
+            )
 
             connection.execute(
                 """
@@ -264,7 +319,8 @@ def _record_news_feedback_for_articles(
                 UPDATE news_articles
                 SET review_status = ?,
                     business_impact_level = CASE WHEN ? = 1 THEN ? ELSE business_impact_level END,
-                    urgency_level = CASE WHEN ? = 1 THEN ? ELSE urgency_level END
+                    urgency_level = CASE WHEN ? = 1 THEN ? ELSE urgency_level END,
+                    recommended_action = ?
                 WHERE id = ?
                 """,
                 (
@@ -273,6 +329,7 @@ def _record_news_feedback_for_articles(
                     payload["impact_level"],
                     payload["is_relevant"],
                     payload["urgency_level"],
+                    updated_recommended_action,
                     article_id,
                 ),
             )
@@ -427,8 +484,7 @@ async def record_news_feedback(request: Request, article_id: int):
     raw_form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
     impact_level = raw_form.get("impact_level", [""])[0].strip()
     urgency_level = raw_form.get("urgency_level", [""])[0].strip()
-    is_relevant = raw_form.get("is_relevant", [""])[0].strip() == "1"
-    is_noise = raw_form.get("is_noise", [""])[0].strip() == "1"
+    is_relevant, is_noise = _parse_feedback_flags(raw_form)
     comment = raw_form.get("comment", [""])[0].strip()
     return_to = raw_form.get("return_to", ["/"])[0].strip() or "/"
     _record_news_feedback_for_articles(
@@ -447,8 +503,7 @@ async def record_news_feedback_bulk(request: Request):
     raw_form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
     impact_level = raw_form.get("impact_level", [""])[0].strip()
     urgency_level = raw_form.get("urgency_level", [""])[0].strip()
-    is_relevant = raw_form.get("is_relevant", [""])[0].strip() == "1"
-    is_noise = raw_form.get("is_noise", [""])[0].strip() == "1"
+    is_relevant, is_noise = _parse_feedback_flags(raw_form)
     comment = raw_form.get("comment", [""])[0].strip()
     return_to = raw_form.get("return_to", ["/"])[0].strip() or "/"
     article_ids = [int(value) for value in raw_form.get("article_ids", []) if value.strip()]

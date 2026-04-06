@@ -100,6 +100,18 @@ class NewsIngestionService:
         feedback_reuse = self.feedback_learning.reuse_feedback(keyword=keyword, title=title)
         impact_level = feedback_reuse.impact_level or analysis.business_impact_level
         urgency_level = feedback_reuse.urgency_level or analysis.urgency_level
+        review_status = feedback_reuse.review_status or analysis.review_status
+        action_updater = getattr(self.analyzer, "apply_feedback_to_action", None)
+        if not callable(action_updater):
+            action_updater = NewsAnalysisService().apply_feedback_to_action
+        recommended_action = action_updater(
+            base_action=analysis.recommended_action,
+            review_status=review_status,
+            owner_department=analysis.owner_department,
+            impact_level=impact_level,
+            urgency_level=urgency_level,
+            comment=feedback_reuse.comment,
+        )
         analysis_trace = {
             **analysis.analysis_trace,
             "feedback_learning": feedback_reuse.to_trace(),
@@ -119,9 +131,9 @@ class NewsIngestionService:
             "business_impact_level": impact_level,
             "urgency_level": urgency_level,
             "relevance_score": analysis.relevance_score,
-            "recommended_action": analysis.recommended_action,
+            "recommended_action": recommended_action,
             "owner_department": analysis.owner_department,
-            "review_status": feedback_reuse.review_status or analysis.review_status,
+            "review_status": review_status,
             "matched_keywords": matched_keywords,
             "analysis_trace": analysis_trace,
         }

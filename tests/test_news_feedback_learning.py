@@ -30,6 +30,7 @@ def _build_connection() -> sqlite3.Connection:
             is_noise INTEGER NOT NULL DEFAULT 0,
             impact_level TEXT,
             urgency_level TEXT,
+            comment TEXT,
             created_at TEXT NOT NULL
         );
         """
@@ -56,10 +57,10 @@ class NewsFeedbackLearningServiceTest(unittest.TestCase):
         connection.execute(
             """
             INSERT INTO news_feedback (
-                article_id, feedback_type, is_relevant, is_noise, impact_level, urgency_level, created_at
-            ) VALUES (1, ?, ?, ?, ?, ?, ?)
+                article_id, feedback_type, is_relevant, is_noise, impact_level, urgency_level, comment, created_at
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("관련", 1, 0, "중요", "high", "2026-04-06T12:00:00+09:00"),
+            ("관련", 1, 0, "중요", "high", "주간 보고 반영", "2026-04-06T12:00:00+09:00"),
         )
 
         service = NewsFeedbackLearningService()
@@ -69,6 +70,7 @@ class NewsFeedbackLearningServiceTest(unittest.TestCase):
         self.assertEqual(result.review_status, "관련")
         self.assertEqual(result.impact_level, "중요")
         self.assertEqual(result.urgency_level, "high")
+        self.assertEqual(result.comment, "주간 보고 반영")
         self.assertTrue(result.is_relevant)
         self.assertFalse(result.is_noise)
         self.assertEqual(result.match_count, 1)
@@ -108,6 +110,7 @@ class NewsIngestionFeedbackIntegrationTest(unittest.TestCase):
                     review_status = "관련"
                     impact_level = "중요"
                     urgency_level = "high"
+                    comment = "주간 보고 반영"
 
                     @staticmethod
                     def to_trace() -> dict[str, object]:
@@ -116,6 +119,7 @@ class NewsIngestionFeedbackIntegrationTest(unittest.TestCase):
                             "review_status": "관련",
                             "impact_level": "중요",
                             "urgency_level": "high",
+                            "comment": "주간 보고 반영",
                             "match_count": 1,
                         }
 
@@ -138,6 +142,7 @@ class NewsIngestionFeedbackIntegrationTest(unittest.TestCase):
         self.assertEqual(article["business_impact_level"], "중요")
         self.assertEqual(article["urgency_level"], "high")
         self.assertEqual(article["analysis_trace"]["feedback_learning"]["review_status"], "관련")
+        self.assertIn("피드백 조치사항: 주간 보고 반영", article["recommended_action"])
 
 
 if __name__ == "__main__":

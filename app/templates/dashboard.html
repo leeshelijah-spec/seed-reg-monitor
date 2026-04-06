@@ -21,27 +21,47 @@
         </div>
       </div>
 
-      <section class="stats-grid stats-grid-two-by-two stats-grid-compact">
-        <article class="stat-card stat-card-chart">
+      <section class="kpi-sidebar-layout">
+        <article class="stat-card stat-card-chart stat-card-span-rows">
           <div class="stat-head">
             <span>중요도 분포</span>
           </div>
-          <div class="chart-shell chart-shell-stat">
-            <canvas id="severityChart" height="160"></canvas>
+          <div class="distribution-summary">
+            <div class="distribution-section">
+              <p class="distribution-label">규제 중요도</p>
+              <div class="distribution-list">
+                {% for item in severity_distribution %}
+                <div class="distribution-item">
+                  <strong>{{ item.label }}</strong>
+                  <span>{{ item.value }}건</span>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="distribution-section">
+              <p class="distribution-label">검토 반영 현황</p>
+              <div class="distribution-list">
+                {% for item in review_status_summary %}
+                <div class="distribution-item">
+                  <strong>{{ item.label }}</strong>
+                  <span>{{ item.value }}건</span>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
           </div>
         </article>
-
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>오늘 신규 건수</span>
           <strong>{{ stats.today_new_count }}</strong>
         </article>
 
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>미검토 건수</span>
           <strong>{{ stats.unreviewed_count }}</strong>
         </article>
 
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>시행일 임박 건수</span>
           <strong>{{ stats.imminent_count }}</strong>
         </article>
@@ -66,22 +86,32 @@
         </div>
       </div>
 
-      <section class="stats-grid stats-grid-two-by-two stats-grid-compact">
-        <article class="stat-card">
+      <section class="kpi-sidebar-layout">
+        <article class="stat-card stat-card-topic-list stat-card-span-rows">
+          <span>가장 많이 언급된 주제 Top 5</span>
+          <div class="topic-rank-list">
+            {% for topic in news_dashboard.kpis.top_topics %}
+            <div class="topic-rank-item">
+              <strong>{{ loop.index }}.</strong>
+              <span>{{ topic.label }}</span>
+              <em>({{ topic.count }}건)</em>
+            </div>
+            {% else %}
+            <p class="topic-rank-empty">최근 7일 기준으로 집계된 주제가 없습니다.</p>
+            {% endfor %}
+          </div>
+        </article>
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>최근 7일 기사 수</span>
           <strong>{{ news_dashboard.kpis.recent_count }}</strong>
         </article>
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>중요 이상 기사</span>
           <strong>{{ news_dashboard.kpis.important_count }}</strong>
         </article>
-        <article class="stat-card">
+        <article class="stat-card stat-card-metric stat-card-side-metric">
           <span>즉시조치 기사</span>
           <strong>{{ news_dashboard.kpis.urgent_count }}</strong>
-        </article>
-        <article class="stat-card">
-          <span>가장 많이 언급된 주제</span>
-          <strong class="stat-label">{{ news_dashboard.kpis.top_topic }}</strong>
         </article>
       </section>
     </article>
@@ -195,25 +225,28 @@
       </div>
     </div>
 
-    <section class="content-grid content-grid-two content-grid-dashboard">
-      <article class="panel panel-half nested-panel">
-        <div class="panel-head">
-          <h3>카테고리별 기사 건수</h3>
-        </div>
-        <div class="chart-shell tall">
-          <canvas id="newsCategoryChart"></canvas>
-        </div>
-      </article>
+    <section class="analysis-layout">
+      <div class="analysis-chart-stack">
+        <article class="panel panel-half nested-panel">
+          <div class="panel-head">
+            <h3>카테고리별 기사 건수</h3>
+          </div>
+          <div class="chart-shell tall">
+            <canvas id="newsCategoryChart"></canvas>
+          </div>
+        </article>
 
-      <article class="panel panel-half nested-panel">
-        <div class="panel-head">
-          <h3>키워드별 언급 추이</h3>
-        </div>
-        <div class="chart-shell tall">
-          <canvas id="newsKeywordChart"></canvas>
-        </div>
-      </article>
-      <article class="panel panel-half nested-panel">
+        <article class="panel panel-half nested-panel">
+          <div class="panel-head">
+            <h3>키워드별 언급 추이</h3>
+          </div>
+          <div class="chart-shell tall">
+            <canvas id="newsKeywordChart"></canvas>
+          </div>
+        </article>
+      </div>
+
+      <article class="panel panel-half nested-panel analysis-summary-panel">
         <div class="panel-head">
           <h3>경영 요약 패널</h3>
         </div>
@@ -244,7 +277,6 @@
           </div>
         </div>
       </article>
-
     </section>
   </article>
 </section>
@@ -377,7 +409,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for group in news_dashboard.article_groups %}
+          {% for kroup in news_dashboard.article_groups %}
           <tr>
             {% set article = group.representative %}
             <td data-filter-values="{{ group.title_filter_values|join('||') }}">
@@ -411,16 +443,11 @@
                           <option value="{{ value }}" {% if value == related_article.urgency_level %}selected{% endif %}>{{ label }}</option>
                           {% endfor %}
                         </select>
-                        <label class="feedback-check">
-                          <input type="checkbox" name="is_relevant" value="1" checked data-feedback-relevant>
-                          관련
-                        </label>
-                        <label class="feedback-check">
-                          <input type="checkbox" name="is_noise" value="1" data-feedback-noise>
-                          잡음
-                        </label>
                         <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#news-review-list">
-                        <button class="mini-button" type="submit">저장</button>
+                        <div class="feedback-actions">
+                          <button class="mini-button" type="submit" name="feedback_action" value="relevant">관련</button>
+                          <button class="mini-button" type="submit" name="feedback_action" value="noise">잡음</button>
+                        </div>
                       </form>
                     </div>
                   </article>
@@ -450,19 +477,14 @@
                   <option value="{{ value }}" {% if value == group.primary_urgency_level %}selected{% endif %}>{{ label }}</option>
                   {% endfor %}
                 </select>
-                <label class="feedback-check">
-                  <input type="checkbox" name="is_relevant" value="1" checked data-feedback-relevant>
-                  관련
-                </label>
-                <label class="feedback-check">
-                  <input type="checkbox" name="is_noise" value="1" data-feedback-noise>
-                  잡음
-                </label>
                 {% for article_id in group.article_ids %}
                 <input type="hidden" name="article_ids" value="{{ article_id }}">
                 {% endfor %}
                 <input type="hidden" name="return_to" value="{{ current_dashboard_url }}#news-review-list">
-                <button class="mini-button" type="submit">{{ "묶음 저장" if group.total_count > 1 else "저장" }}</button>
+                <div class="feedback-actions">
+                  <button class="mini-button" type="submit" name="feedback_action" value="relevant">관련</button>
+                  <button class="mini-button" type="submit" name="feedback_action" value="noise">잡음</button>
+                </div>
               </form>
             </td>
           </tr>
@@ -547,40 +569,6 @@
       button.setAttribute("aria-expanded", isOpen ? "false" : "true");
       button.textContent = isOpen ? "확대" : "접기";
     });
-  });
-
-  document.querySelectorAll("[data-feedback-form]").forEach((form) => {
-    const relevant = form.querySelector("[data-feedback-relevant]");
-    const noise = form.querySelector("[data-feedback-noise]");
-    const impact = form.querySelector("select[name='impact_level']");
-    const urgency = form.querySelector("select[name='urgency_level']");
-    if (!relevant || !noise || !impact || !urgency) {
-      return;
-    }
-
-    const syncFeedbackState = () => {
-      if (noise.checked) {
-        relevant.checked = false;
-      }
-      impact.disabled = noise.checked;
-      urgency.disabled = noise.checked;
-    };
-
-    relevant.addEventListener("change", () => {
-      if (relevant.checked) {
-        noise.checked = false;
-      }
-      syncFeedbackState();
-    });
-
-    noise.addEventListener("change", () => {
-      if (noise.checked) {
-        relevant.checked = false;
-      }
-      syncFeedbackState();
-    });
-
-    syncFeedbackState();
   });
 
   const filterPopover = document.createElement("div");
@@ -852,34 +840,6 @@
 
   window.addEventListener("resize", closeFilterPopover);
   document.addEventListener("scroll", closeFilterPopover, true);
-
-  const severityData = {{ severity_distribution|tojson }};
-  const severityCtx = document.getElementById("severityChart");
-  new Chart(severityCtx, {
-    type: "doughnut",
-    data: {
-      labels: severityData.map((item) => item.label),
-      datasets: [{
-        data: severityData.map((item) => item.value),
-        backgroundColor: ["#006f36", "#00984b", "#42b772", "#b8dec8"],
-        borderWidth: 0
-      }]
-    },
-    options: {
-      maintainAspectRatio: false,
-      cutout: "64%",
-      plugins: {
-        legend: {
-          position: "bottom",
-          labels: {
-            boxWidth: 10,
-            color: "#22543d",
-            padding: 14
-          }
-        }
-      }
-    }
-  });
 
   const category7 = {{ news_dashboard.trend.category_7d|tojson }};
   const category30 = {{ news_dashboard.trend.category_30d|tojson }};
