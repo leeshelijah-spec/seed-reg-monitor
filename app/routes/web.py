@@ -17,11 +17,38 @@ from ..services.news_keywords import NewsKeywordService
 from ..services.news_utils import now_iso
 
 
+REVIEW_UNKNOWN = "\ubbf8\ud655\uc778"
+REVIEW_NEEDED = "\uc870\uce58\ud544\uc694"
+REVIEW_IN_PROGRESS = "\uc870\uce58\uc911"
+REVIEW_DONE = "\uc870\uce58\uc644\ub8cc"
+REVIEW_NOT_APPLICABLE = "\ud574\ub2f9\uc5c6\uc74c"
+ACTION_STATUS_OPTIONS = (
+    REVIEW_UNKNOWN,
+    REVIEW_NEEDED,
+    REVIEW_IN_PROGRESS,
+    REVIEW_DONE,
+    REVIEW_NOT_APPLICABLE,
+)
+
+UNREVIEWED = "\ubbf8\uac80\ud1a0"
+RELEVANT = "\uad00\ub828"
+NOISE = "\uc7a1\uc74c"
+IMPACT_OPTIONS = (
+    ("\uc989\uc2dc\uc870\uce58", "\uc989\uc2dc\uc870\uce58"),
+    ("\uc911\uc694", "\uc911\uc694"),
+    ("\uac80\ud1a0\ud544\uc694", "\uac80\ud1a0\ud544\uc694"),
+    ("\ucc38\uace0", "\ucc38\uace0"),
+)
+URGENCY_OPTIONS = (
+    ("high", "\ub192\uc74c"),
+    ("medium", "\ubcf4\ud1b5"),
+    ("low", "\ub0ae\uc74c"),
+)
+
+
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["settings"] = settings
-ACTION_STATUS_OPTIONS = ("미확인", "조치필요", "조치중", "조치완료", "해당없음")
-NEWS_FEEDBACK_TYPES = ("중요", "잡음", "분류오류")
 
 
 def _parse_news_filters(request: Request) -> NewsFilterParams:
@@ -93,7 +120,7 @@ def _load_regulation_dashboard(show_all: bool = False) -> dict:
                         ORDER BY rl.updated_at DESC, rl.rowid DESC
                         LIMIT 1
                     ),
-                    '미확인'
+                    ?
                 ) AS action_status
             FROM regulations r
             {where_clause}
@@ -101,7 +128,12 @@ def _load_regulation_dashboard(show_all: bool = False) -> dict:
             LIMIT 20
         """
         recent_rows = connection.execute(
-            recent_sql.format(where_clause="" if show_all else "WHERE NOT EXISTS (SELECT 1 FROM review_logs rl2 WHERE rl2.regulation_id = r.id)"),
+            recent_sql.format(
+                where_clause=""
+                if show_all
+                else "WHERE NOT EXISTS (SELECT 1 FROM review_logs rl2 WHERE rl2.regulation_id = r.id)"
+            ),
+            (REVIEW_UNKNOWN,),
         ).fetchall()
         latest_sync = connection.execute(
             "SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1"
@@ -112,7 +144,7 @@ def _load_regulation_dashboard(show_all: bool = False) -> dict:
         item = row_to_regulation(row)
         if item is None:
             continue
-        item["action_status"] = row["action_status"] or ACTION_STATUS_OPTIONS[0]
+        item["action_status"] = row["action_status"] or REVIEW_UNKNOWN
         recent_regulations.append(item)
 
     return {
@@ -128,6 +160,122 @@ def _load_regulation_dashboard(show_all: bool = False) -> dict:
         "show_all_regulations": show_all,
         "latest_sync": dict(latest_sync) if latest_sync else None,
     }
+
+
+def _derive_feedback_payload(
+    *,
+    impact_level: str,
+    urgency_level: str,
+    is_relevant: bool,
+    is_noise: bool,
+    comment: str | None,
+) -> dict[str, object]:
+    valid_impacts = {value for value, _ in IMPACT_OPTIONS}
+    valid_urgencies = {value for value, _ in URGENCY_OPTIONS}
+
+    if is_noise and is_relevant:
+        raise HTTPException(status_code=400, detail="Noise items cannot also be marked relevant")
+
+    normalized_impact_level = None
+    normalized_urgency_level = None
+    if is_relevant:
+        if impact_level not in valid_impacts:
+            raise HTTPException(status_code=400, detail="Invalid impact level")
+        if urgency_level not in valid_urgencies:
+            raise HTTPException(status_code=400, detail="Invalid urgency level")
+        normalized_impact_level = impact_level
+        normalized_urgency_level = urgency_level
+
+    feedback_type = RELEVANT if is_relevant else NOISE if is_noise else "\uac80\ud1a0\uc644\ub8cc"
+    review_status = RELEVANT if is_relevant else NOISE if is_noise else "\uac80\ud1a0\uc644\ub8cc"
+
+    return {
+        "feedback_type": feedback_type,
+        "review_status": review_status,
+        "impact_level": normalized_impact_level,
+        "urgency_level": normalized_urgency_level,
+        "is_relevant": 1 if is_relevant else 0,
+        "is_noise": 1 if is_noise else 0,
+        "comment": comment or None,
+    }
+
+
+def _record_news_feedback_for_articles(
+    *,
+    article_ids: list[int],
+    impact_level: str,
+    urgency_level: str,
+    is_relevant: bool,
+    is_noise: bool,
+    comment: str | None,
+) -> None:
+    if not article_ids:
+        raise HTTPException(status_code=400, detail="Article id is required")
+
+    payload = _derive_feedback_payload(
+        impact_level=impact_level,
+        urgency_level=urgency_level,
+        is_relevant=is_relevant,
+        is_noise=is_noise,
+        comment=comment,
+    )
+    unique_article_ids = list(dict.fromkeys(article_ids))
+    placeholders = ",".join("?" for _ in unique_article_ids)
+    created_at = now_iso()
+
+    with get_connection() as connection:
+        existing_rows = connection.execute(
+            f"SELECT id FROM news_articles WHERE id IN ({placeholders})",
+            unique_article_ids,
+        ).fetchall()
+        existing_ids = {row["id"] for row in existing_rows}
+
+        for article_id in unique_article_ids:
+            if article_id not in existing_ids:
+                raise HTTPException(status_code=404, detail="Article not found")
+
+            connection.execute(
+                """
+                INSERT INTO news_feedback (
+                    article_id,
+                    feedback_type,
+                    is_relevant,
+                    is_noise,
+                    impact_level,
+                    urgency_level,
+                    comment,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    article_id,
+                    payload["feedback_type"],
+                    payload["is_relevant"],
+                    payload["is_noise"],
+                    payload["impact_level"],
+                    payload["urgency_level"],
+                    payload["comment"],
+                    created_at,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE news_articles
+                SET review_status = ?,
+                    business_impact_level = CASE WHEN ? = 1 THEN ? ELSE business_impact_level END,
+                    urgency_level = CASE WHEN ? = 1 THEN ? ELSE urgency_level END
+                WHERE id = ?
+                """,
+                (
+                    payload["review_status"],
+                    payload["is_relevant"],
+                    payload["impact_level"],
+                    payload["is_relevant"],
+                    payload["urgency_level"],
+                    article_id,
+                ),
+            )
 
 
 @router.get("/")
@@ -148,7 +296,8 @@ def dashboard(request: Request):
             "news_dashboard": news_dashboard,
             "news_keywords": news_keywords,
             "news_api_configured": news_service.is_configured(),
-            "news_feedback_types": NEWS_FEEDBACK_TYPES,
+            "news_impact_options": IMPACT_OPTIONS,
+            "news_urgency_options": URGENCY_OPTIONS,
             "current_dashboard_url": current_dashboard_url,
             "regulation_toggle_url": _dashboard_url(
                 request,
@@ -276,33 +425,39 @@ async def toggle_news_keyword(request: Request, keyword_id: int):
 @router.post("/news/{article_id}/feedback")
 async def record_news_feedback(request: Request, article_id: int):
     raw_form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
-    feedback_type = raw_form.get("feedback_type", [""])[0].strip()
+    impact_level = raw_form.get("impact_level", [""])[0].strip()
+    urgency_level = raw_form.get("urgency_level", [""])[0].strip()
+    is_relevant = raw_form.get("is_relevant", [""])[0].strip() == "1"
+    is_noise = raw_form.get("is_noise", [""])[0].strip() == "1"
     comment = raw_form.get("comment", [""])[0].strip()
     return_to = raw_form.get("return_to", ["/"])[0].strip() or "/"
-    if feedback_type not in NEWS_FEEDBACK_TYPES:
-        raise HTTPException(status_code=400, detail="Invalid feedback type")
+    _record_news_feedback_for_articles(
+        article_ids=[article_id],
+        impact_level=impact_level,
+        urgency_level=urgency_level,
+        is_relevant=is_relevant,
+        is_noise=is_noise,
+        comment=comment or None,
+    )
+    return RedirectResponse(url=return_to, status_code=303)
 
-    with get_connection() as connection:
-        exists = connection.execute(
-            "SELECT 1 FROM news_articles WHERE id = ?",
-            (article_id,),
-        ).fetchone()
-        if exists is None:
-            raise HTTPException(status_code=404, detail="Article not found")
-        connection.execute(
-            """
-            INSERT INTO news_feedback (article_id, feedback_type, comment, created_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (article_id, feedback_type, comment or None, now_iso()),
-        )
-        connection.execute(
-            """
-            UPDATE news_articles
-            SET review_status = ?
-            WHERE id = ?
-            """,
-            (feedback_type, article_id),
-        )
 
+@router.post("/news/feedback/bulk")
+async def record_news_feedback_bulk(request: Request):
+    raw_form = parse_qs((await request.body()).decode("utf-8"), keep_blank_values=True)
+    impact_level = raw_form.get("impact_level", [""])[0].strip()
+    urgency_level = raw_form.get("urgency_level", [""])[0].strip()
+    is_relevant = raw_form.get("is_relevant", [""])[0].strip() == "1"
+    is_noise = raw_form.get("is_noise", [""])[0].strip() == "1"
+    comment = raw_form.get("comment", [""])[0].strip()
+    return_to = raw_form.get("return_to", ["/"])[0].strip() or "/"
+    article_ids = [int(value) for value in raw_form.get("article_ids", []) if value.strip()]
+    _record_news_feedback_for_articles(
+        article_ids=article_ids,
+        impact_level=impact_level,
+        urgency_level=urgency_level,
+        is_relevant=is_relevant,
+        is_noise=is_noise,
+        comment=comment or None,
+    )
     return RedirectResponse(url=return_to, status_code=303)

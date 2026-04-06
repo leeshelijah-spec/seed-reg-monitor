@@ -2,9 +2,39 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+import re
 from typing import Any
 
 from ..database import get_connection, row_to_news_article
+
+
+UNREVIEWED = "\ubbf8\uac80\ud1a0"
+IMPORTANT = "\uc911\uc694"
+IMMEDIATE = "\uc989\uc2dc\uc870\uce58"
+NEEDS_REVIEW = "\uac80\ud1a0\ud544\uc694"
+REFERENCE = "\ucc38\uace0"
+NOISE = "\uc7a1\uc74c"
+CLASSIFICATION_ERROR = "\ubd84\ub958\uc624\ub958"
+
+TITLE_TOKEN_RE = re.compile(r"[0-9A-Za-z\uac00-\ud7a3]+")
+NEWS_TITLE_STOPWORDS = {
+    "\uae30\uc0ac",
+    "\ub2e8\ub3c5",
+    "\uc18d\ubcf4",
+    "\uc885\ud569",
+    "\uc778\ud130\ubdf0",
+    "\ud604\uc7a5",
+    "\uc624\ub298",
+    "\uc774\ubc88",
+    "\uad00\ub828",
+    "\ub17c\ub780",
+    "\uae30\uc790",
+    "\ub274\uc2a4",
+    "\ub124\uc774\ubc84",
+}
+IMPACT_PRIORITY = {IMMEDIATE: 4, IMPORTANT: 3, NEEDS_REVIEW: 2, REFERENCE: 1}
+URGENCY_PRIORITY = {"high": 3, "medium": 2, "low": 1}
+REVIEW_PRIORITY = {CLASSIFICATION_ERROR: 3, IMPORTANT: 2, NOISE: 1, UNREVIEWED: 0}
 
 
 @dataclass
@@ -20,11 +50,13 @@ class NewsFilterParams:
 
 class NewsDashboardService:
     def load_dashboard(self, filters: NewsFilterParams) -> dict[str, Any]:
+        articles = self._load_articles(filters)
         return {
             "filters": self._serialize_filters(filters),
             "filter_options": self._load_filter_options(),
             "kpis": self._load_kpis(),
-            "articles": self._load_articles(filters),
+            "articles": articles,
+            "article_groups": self._group_articles(articles),
             "trend": self._load_trend_data(filters),
             "executive_summary": self._build_executive_summary(filters),
             "operations": self._load_operations(),
@@ -69,7 +101,7 @@ class NewsDashboardService:
             params.append(filters.owner_department)
         if apply_review_filter and not filters.show_all_articles:
             conditions.append("review_status = ?")
-            params.append("미검토")
+            params.append(UNREVIEWED)
 
         if not conditions:
             return "", params
@@ -115,12 +147,12 @@ class NewsDashboardService:
                 """
                 SELECT
                     COUNT(*) AS recent_count,
-                    SUM(CASE WHEN business_impact_level IN ('중요', '즉시조치') THEN 1 ELSE 0 END) AS important_count,
-                    SUM(CASE WHEN business_impact_level = '즉시조치' THEN 1 ELSE 0 END) AS urgent_count
+                    SUM(CASE WHEN business_impact_level IN (?, ?) THEN 1 ELSE 0 END) AS important_count,
+                    SUM(CASE WHEN business_impact_level = ? THEN 1 ELSE 0 END) AS urgent_count
                 FROM news_articles
                 WHERE substr(COALESCE(published_at, collected_at), 1, 10) >= ?
                 """,
-                (seven_days_ago,),
+                (IMPORTANT, IMMEDIATE, IMMEDIATE, seven_days_ago),
             ).fetchone()
             top_topic_row = connection.execute(
                 """
@@ -157,6 +189,190 @@ class NewsDashboardService:
             if item:
                 articles.append(item)
         return articles
+
+    def _group_articles(self, articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        clusters: list[list[dict[str, Any]]] = []
+
+        for article in articles:
+            matched_cluster: list[dict[str, Any]] | None = None
+            for cluster in clusters:
+                if any(self._are_related_articles(article, existing) for existing in cluster):
+                    matched_cluster = cluster
+                    break
+            if matched_cluster is None:
+                clusters.append([article])
+            else:
+                matched_cluster.append(article)
+
+        groups = [self._build_article_group(index, cluster) for index, cluster in enumerate(clusters, start=1)]
+        groups.sort(
+            key=lambda group: (
+                group["latest_published_at"] or "",
+                group["max_relevance_score"],
+                group["total_count"],
+            ),
+            reverse=True,
+        )
+        return groups
+
+    def _build_article_group(self, index: int, articles: list[dict[str, Any]]) -> dict[str, Any]:
+        sorted_articles = sorted(
+            articles,
+            key=lambda article: (
+                article.get("published_at") or article.get("collected_at") or "",
+                article.get("relevance_score", 0),
+                article.get("id", 0),
+            ),
+            reverse=True,
+        )
+        representative = sorted_articles[0]
+        matched_keywords = sorted({keyword for article in sorted_articles for keyword in article.get("matched_keywords", [])})
+        topic_categories = sorted({article.get("topic_category") or "-" for article in sorted_articles})
+        impact_levels = sorted(
+            {article.get("business_impact_level") or "-" for article in sorted_articles},
+            key=lambda value: (-IMPACT_PRIORITY.get(value, 0), value),
+        )
+        urgency_levels = sorted(
+            {article.get("urgency_level") or "-" for article in sorted_articles},
+            key=lambda value: (-URGENCY_PRIORITY.get(value, 0), value),
+        )
+        review_statuses = sorted(
+            {article.get("review_status") or UNREVIEWED for article in sorted_articles},
+            key=lambda value: (-REVIEW_PRIORITY.get(value, 0), value),
+        )
+        source_titles = sorted({article.get("source_title") or "-" for article in sorted_articles})
+        latest_published_at = max(
+            (article.get("published_at") or article.get("collected_at") or "" for article in sorted_articles),
+            default="",
+        )
+
+        return {
+            "group_id": f"news-group-{index}",
+            "display_title": representative["title"],
+            "related_count": max(len(sorted_articles) - 1, 0),
+            "total_count": len(sorted_articles),
+            "representative": representative,
+            "articles": sorted_articles,
+            "article_ids": [article["id"] for article in sorted_articles],
+            "latest_published_at": latest_published_at,
+            "matched_keywords": matched_keywords,
+            "topic_categories": topic_categories,
+            "business_impact_levels": impact_levels,
+            "urgency_levels": urgency_levels,
+            "review_statuses": review_statuses,
+            "primary_topic_category": representative.get("topic_category") or "-",
+            "primary_business_impact_level": impact_levels[0] if impact_levels else representative.get("business_impact_level") or "-",
+            "primary_urgency_level": urgency_levels[0] if urgency_levels else representative.get("urgency_level") or "-",
+            "primary_review_status": review_statuses[0] if review_statuses else representative.get("review_status") or UNREVIEWED,
+            "has_mixed_review_statuses": len(review_statuses) > 1,
+            "source_count": len(source_titles),
+            "max_relevance_score": max((article.get("relevance_score", 0) for article in sorted_articles), default=0),
+            "title_filter_values": sorted(
+                {
+                    value
+                    for article in sorted_articles
+                    for value in [article.get("title") or "-", article.get("source_title") or "-"]
+                }
+            ),
+        }
+
+    def _are_related_articles(self, left: dict[str, Any], right: dict[str, Any]) -> bool:
+        left_title = self._normalize_group_title(left.get("title"))
+        right_title = self._normalize_group_title(right.get("title"))
+        if not left_title or not right_title:
+            return False
+        if left_title == right_title:
+            return True
+        if (left_title in right_title or right_title in left_title) and min(len(left_title), len(right_title)) >= 12:
+            return True
+
+        left_tokens = self._title_tokens(left.get("title"))
+        right_tokens = self._title_tokens(right.get("title"))
+        if not left_tokens or not right_tokens:
+            return False
+
+        intersection = left_tokens & right_tokens
+        if not intersection:
+            return False
+
+        overlap_ratio = len(intersection) / min(len(left_tokens), len(right_tokens))
+        jaccard = len(intersection) / len(left_tokens | right_tokens)
+        title_char_jaccard = self._char_ngram_similarity(left.get("title"), right.get("title"))
+        same_keyword = bool(set(left.get("matched_keywords", [])) & set(right.get("matched_keywords", [])))
+        same_category = left.get("topic_category") == right.get("topic_category")
+        left_context_tokens = self._context_tokens(left)
+        right_context_tokens = self._context_tokens(right)
+        context_intersection = left_context_tokens & right_context_tokens
+        context_jaccard = (
+            len(context_intersection) / len(left_context_tokens | right_context_tokens)
+            if left_context_tokens and right_context_tokens
+            else 0.0
+        )
+        shared_salient_tokens = self._salient_tokens(left_context_tokens) & self._salient_tokens(right_context_tokens)
+
+        if overlap_ratio >= 0.8:
+            return True
+        if same_keyword and title_char_jaccard >= 0.48:
+            return True
+        if same_keyword and len(shared_salient_tokens) >= 3 and context_jaccard >= 0.28:
+            return True
+        if same_keyword and jaccard >= 0.5:
+            return True
+        if same_keyword and same_category and title_char_jaccard >= 0.35:
+            return True
+        if same_keyword and same_category and context_jaccard >= 0.38:
+            return True
+        if same_keyword and same_category and overlap_ratio >= 0.6:
+            return True
+        return False
+
+    def _normalize_group_title(self, title: str | None) -> str:
+        if not title:
+            return ""
+        cleaned = re.sub(r"[\[\]\(\)\"'“”‘’·,…!?:;/\\|-]+", " ", title.lower())
+        return re.sub(r"\s+", " ", cleaned).strip()
+
+    def _title_tokens(self, title: str | None) -> set[str]:
+        normalized = self._normalize_group_title(title)
+        tokens = {token for token in TITLE_TOKEN_RE.findall(normalized) if len(token) >= 2}
+        return {token for token in tokens if token not in NEWS_TITLE_STOPWORDS}
+
+    def _context_tokens(self, article: dict[str, Any]) -> set[str]:
+        normalized = self._normalize_group_title(
+            " ".join(
+                part
+                for part in [
+                    article.get("title") or "",
+                    article.get("summary") or "",
+                    " ".join(article.get("matched_keywords", [])),
+                ]
+                if part
+            )
+        )
+        tokens = {token for token in TITLE_TOKEN_RE.findall(normalized) if len(token) >= 2}
+        return {token for token in tokens if token not in NEWS_TITLE_STOPWORDS}
+
+    def _salient_tokens(self, tokens: set[str]) -> set[str]:
+        return {
+            token
+            for token in tokens
+            if len(token) >= 4 or any(character.isdigit() for character in token)
+        }
+
+    def _char_ngram_similarity(self, left_text: str | None, right_text: str | None, size: int = 3) -> float:
+        left_ngrams = self._char_ngrams(left_text, size=size)
+        right_ngrams = self._char_ngrams(right_text, size=size)
+        if not left_ngrams or not right_ngrams:
+            return 0.0
+        return len(left_ngrams & right_ngrams) / len(left_ngrams | right_ngrams)
+
+    def _char_ngrams(self, text: str | None, *, size: int) -> set[str]:
+        compact = re.sub(r"\s+", "", self._normalize_group_title(text))
+        if not compact:
+            return set()
+        if len(compact) <= size:
+            return {compact}
+        return {compact[index : index + size] for index in range(len(compact) - size + 1)}
 
     def _load_trend_data(self, filters: NewsFilterParams) -> dict[str, Any]:
         where_clause, params = self._where_clause(filters, apply_review_filter=False)
@@ -223,27 +439,27 @@ class NewsDashboardService:
                 f"""
                 SELECT title, owner_department, business_impact_level
                 FROM news_articles
-                WHERE business_impact_level IN ('중요', '즉시조치'){where_tail}
+                WHERE business_impact_level IN (?, ?){where_tail}
                 ORDER BY relevance_score DESC, COALESCE(published_at, collected_at) DESC
                 LIMIT 3
                 """,
-                params,
+                [IMPORTANT, IMMEDIATE, *params],
             ).fetchall()
 
         key_trends = [
-            f"{row['topic_category']} 이슈가 최근 7일 기준 {row['count']}건으로 상위권을 형성했습니다."
+            f"{row['topic_category']} issue led the last 7 days with {row['count']} tracked articles."
             for row in top_topics
-        ] or ["최근 7일 기준 누적된 산업 뉴스가 아직 없습니다."]
+        ] or ["There are not enough recent articles yet to summarize a clear trend."]
 
         implications = [
-            f"{row['owner_department']} 주도로 '{row['title']}'와 유사한 이슈의 사업 영향 여부를 점검할 필요가 있습니다."
+            f"{row['owner_department']} should review the business impact of '{row['title']}'."
             for row in urgent_rows
-        ] or ["고영향 기사 누적 전까지는 키워드 커버리지와 수집 안정성을 우선 점검하세요."]
+        ] or ["Keep expanding the keyword set until higher-priority news accumulates."]
 
         recommended_tasks = [
-            "주간 경영회의 전에 중요/즉시조치 기사와 규제 이슈를 함께 검토해 실행 우선순위를 맞추세요.",
-            "키워드 관리 화면에서 잡음이 많은 검색어는 비활성화하고 품목별 세부 키워드를 보강하세요.",
-            "기사 피드백을 누적해 분류오류 패턴을 분석 규칙에 반영하세요.",
+            "Review important and urgent articles together before the weekly management meeting.",
+            "Disable noisy keywords and add replacement keywords from the operations panel.",
+            "Use accumulated feedback to tighten classification and grouping rules.",
         ]
         return {
             "key_trends": key_trends[:3],
