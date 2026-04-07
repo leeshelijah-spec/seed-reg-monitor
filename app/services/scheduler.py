@@ -16,7 +16,7 @@ def create_scheduler() -> BackgroundScheduler:
         CronTrigger(day_of_week="mon-fri", hour=9, minute=5, timezone=ZoneInfo(settings.timezone)),
         id="weekday-regulation-sync",
         replace_existing=True,
-        kwargs={"lookback_days": 3},
+        kwargs={"lookback_days": settings.regulation_sync_lookback_days},
     )
     news_service = NewsIngestionService()
     if news_service.is_configured():

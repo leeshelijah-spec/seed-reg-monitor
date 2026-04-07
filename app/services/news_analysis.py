@@ -5,14 +5,14 @@ from typing import Any
 
 
 TOPIC_RULES = {
-    "규제/정책": ["법", "정책", "지원", "규제", "개정", "보호", "등록", "허가", "보조금"],
-    "시장수급": ["가격", "수급", "공급", "생산량", "재배면적", "물량", "매출", "수요", "확대"],
-    "경쟁사동향": ["출시", "협약", "투자", "법인", "파트너십", "인수", "브랜드", "기업"],
-    "기술·품종": ["육종", "품종", "신품종", "기술", "유전자", "내병성", "종묘", "실증"],
+    "규제/정책": ["법", "정책", "지침", "규제", "개정", "보호", "등록", "허가", "보조금"],
+    "시장수급": ["가격", "수급", "공급", "생산량", "재배면적", "물량", "매출", "수요", "품절"],
+    "경쟁사동향": ["출시", "신작", "투자", "법인", "파트너십", "인수", "브랜드", "기업"],
+    "기술·품종": ["품종", "육종", "종자", "기술", "유전", "신품종", "채종", "육묘"],
     "수출입·검역": ["수출", "수입", "검역", "통관", "관세", "검사", "방역", "해외"],
-    "기후·병해충": ["폭염", "한파", "가뭄", "병해충", "바이러스", "재해", "기후", "피해"],
+    "기후·병해충": ["폭염", "한파", "가뭄", "병해충", "바이러스", "피해", "기후", "재해"],
     "소비트렌드": ["소비", "선호", "프리미엄", "간편식", "친환경", "온라인", "트렌드", "유통"],
-    "평판리스크": ["리콜", "논란", "피해", "위반", "불만", "허위", "제재", "안전성"],
+    "평판리스크": ["리콜", "불매", "피해", "위반", "불만", "허위", "제재", "안전성"],
 }
 
 OWNER_BY_CATEGORY = {
@@ -26,12 +26,12 @@ OWNER_BY_CATEGORY = {
     "평판리스크": "경영기획",
 }
 
-IMMEDIATE_TERMS = ["회수", "중단", "금지", "리콜", "검출", "급등", "확산", "긴급", "비상"]
-IMPORTANT_TERMS = ["영향", "확대", "위반", "부족", "차질", "강화", "투자", "수출", "수입"]
+IMMEDIATE_TERMS = ["철수", "중단", "금지", "리콜", "검출", "급등", "확산", "긴급", "비상"]
+IMPORTANT_TERMS = ["영향", "품절", "위반", "부족", "차질", "강화", "투자", "수출", "수입"]
 SEED_BUSINESS_TERMS = [
     "종자",
-    "종묘",
-    "육종",
+    "육묘",
+    "채종",
     "품종",
     "채소",
     "검역",
@@ -41,6 +41,33 @@ SEED_BUSINESS_TERMS = [
     "수출",
     "수입",
 ]
+SPORTS_TERMS = [
+    "스포츠",
+    "축구",
+    "야구",
+    "농구",
+    "배구",
+    "골프",
+    "리그",
+    "개막전",
+    "승리",
+    "패배",
+    "무승부",
+    "득점",
+    "결승골",
+    "홈런",
+    "투수",
+    "타자",
+    "선수",
+    "감독",
+    "구단",
+    "경기",
+    "라운드",
+    "토너먼트",
+    "챔피언십",
+    "우승",
+]
+
 UNREVIEWED_STATUS = "미검토"
 RELEVANT_STATUS = "관련"
 NOISE_STATUS = "잡음"
@@ -64,6 +91,35 @@ class NewsAnalysisService:
         title = article.get("title", "")
         summary = article.get("summary", "")
         full_text = f"{title}\n{summary}".lower()
+
+        sports_noise, sports_hits, domain_hits = self._detect_sports_noise(full_text)
+        if sports_noise:
+            owner_department = OWNER_BY_CATEGORY["평판리스크"]
+            return NewsAnalysisResult(
+                topic_category="평판리스크",
+                business_impact_level="참고",
+                urgency_level="low",
+                relevance_score=0,
+                recommended_action=self.apply_feedback_to_action(
+                    base_action="",
+                    review_status=NOISE_STATUS,
+                    owner_department=owner_department,
+                    impact_level="참고",
+                    urgency_level="low",
+                    comment="스포츠 경기 기사로 판단되어 자동 제외되었습니다.",
+                ),
+                owner_department=owner_department,
+                review_status=NOISE_STATUS,
+                analysis_trace={
+                    "rule_hits": {
+                        "sports_hits": sports_hits,
+                        "domain_hits": domain_hits,
+                        "matched_keywords": matched_keywords,
+                    },
+                    "llm_refinement": self._llm_trace(),
+                    "sports_noise": True,
+                },
+            )
 
         category_scores: dict[str, int] = {}
         for category, keywords in TOPIC_RULES.items():
@@ -93,6 +149,7 @@ class NewsAnalysisService:
                 "matched_keywords": matched_keywords,
             },
             "llm_refinement": self._llm_trace(),
+            "sports_noise": False,
         }
         return NewsAnalysisResult(
             topic_category=topic_category,
@@ -101,7 +158,7 @@ class NewsAnalysisService:
             relevance_score=relevance_score,
             recommended_action=recommended_action,
             owner_department=owner_department,
-            review_status="미검토",
+            review_status=UNREVIEWED_STATUS,
             analysis_trace=analysis_trace,
         )
 
@@ -134,7 +191,7 @@ class NewsAnalysisService:
         matched_keywords: list[str],
         owner_department: str,
     ) -> str:
-        keywords_text = ", ".join(matched_keywords[:3]) or "핵심 키워드"
+        keywords_text = ", ".join(matched_keywords[:3]) or "해당 키워드"
         lines = [
             f"{owner_department}에서 {topic_category} 이슈 여부를 1차 확인하고 관련 기사 원문을 검토하세요.",
             f"{keywords_text} 기준으로 당사 품목, 공급 일정, 거래선 영향 범위를 점검하세요.",
@@ -142,7 +199,7 @@ class NewsAnalysisService:
         if impact_level in {"중요", "즉시조치"} or urgency_level == "high":
             lines.append("필요 시 경영진 보고 안건으로 상정하고 이번 주 실행 과제를 확정하세요.")
         else:
-            lines.append("추가 기사 추이를 모니터링하며 주간 보고서에 반영하세요.")
+            lines.append("추가 기사 추이를 모니터링하고 주간 보고서에 반영하세요.")
         return "\n".join(lines)
 
     def apply_feedback_to_action(
@@ -178,5 +235,10 @@ class NewsAnalysisService:
 
         return "\n".join(lines)
 
+    def _detect_sports_noise(self, full_text: str) -> tuple[bool, list[str], list[str]]:
+        sports_hits = [term for term in SPORTS_TERMS if term.lower() in full_text]
+        domain_hits = [term for term in SEED_BUSINESS_TERMS if term.lower() in full_text]
+        return len(sports_hits) >= 2 and len(domain_hits) <= 1, sports_hits, domain_hits
+
     def _llm_trace(self) -> dict[str, Any]:
-        return {"applied": False, "reason": "rule_based_only", "detail": "LLM 보정은 추후 API 키 구성 시 확장 가능"}
+        return {"applied": False, "reason": "rule_based_only", "detail": "LLM 보정은 추후 API 재구성 시 확장 가능합니다."}

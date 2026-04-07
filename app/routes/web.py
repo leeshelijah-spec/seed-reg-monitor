@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from threading import Thread
 from datetime import date, datetime, timedelta
 from urllib.parse import parse_qs, urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from ..config import settings
@@ -15,6 +16,7 @@ from ..services.news_analysis import NewsAnalysisService
 from ..services.news_dashboard import NewsDashboardService, NewsFilterParams
 from ..services.news_ingestion import NewsIngestionService
 from ..services.news_keywords import NewsKeywordService
+from ..services.sync_progress import sync_progress
 from ..services.news_utils import now_iso
 
 
@@ -50,6 +52,80 @@ URGENCY_OPTIONS = (
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["settings"] = settings
+
+
+def _sync_progress_payload() -> dict[str, dict]:
+    return sync_progress.snapshot_all()
+
+
+def _build_progress_callback(kind: str):
+    def _callback(current: int, total: int, message: str) -> None:
+        sync_progress.update(kind, current=current, total=total, message=message)
+
+    return _callback
+
+
+def _start_regulation_sync_job() -> bool:
+    started = sync_progress.begin(
+        "regulation",
+        message="규제 동기화를 준비하는 중입니다.",
+        total=1,
+    )
+    if not started:
+        return False
+
+    def _worker() -> None:
+        try:
+            result = IngestionService().run(
+                lookback_days=settings.regulation_sync_lookback_days,
+                progress_callback=_build_progress_callback("regulation"),
+            )
+            sync_progress.complete(
+                "regulation",
+                message=f"규제 동기화가 완료되었습니다. 신규 {result['inserted_count']}건을 반영했습니다.",
+                result={
+                    "collected_count": result["collected_count"],
+                    "inserted_count": result["inserted_count"],
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            sync_progress.fail("regulation", message=f"규제 동기화 중 오류가 발생했습니다: {exc}")
+
+    Thread(target=_worker, daemon=True, name="regulation-sync").start()
+    return True
+
+
+def _start_news_sync_job() -> bool:
+    service = NewsIngestionService()
+    if not service.is_configured():
+        sync_progress.fail("news", message="뉴스 API 설정이 없어 수집을 시작할 수 없습니다.")
+        return False
+
+    started = sync_progress.begin(
+        "news",
+        message="뉴스 수집을 준비하는 중입니다.",
+        total=1,
+    )
+    if not started:
+        return False
+
+    def _worker() -> None:
+        try:
+            result = service.run(
+                run_type="manual",
+                progress_callback=_build_progress_callback("news"),
+            )
+            final_message = (
+                f"뉴스 수집이 완료되었습니다. 신규 {result['inserted_count']}건, 중복 {result['duplicate_count']}건입니다."
+            )
+            if result["errors"]:
+                final_message = f"뉴스 수집이 끝났지만 오류 {len(result['errors'])}건이 있어 확인이 필요합니다."
+            sync_progress.complete("news", message=final_message, result=result)
+        except Exception as exc:  # noqa: BLE001
+            sync_progress.fail("news", message=f"뉴스 수집 중 오류가 발생했습니다: {exc}")
+
+    Thread(target=_worker, daemon=True, name="news-sync").start()
+    return True
 
 
 def _parse_news_filters(request: Request) -> NewsFilterParams:
@@ -381,6 +457,25 @@ def news_articles_api(request: Request):
     return {"count": len(data["articles"]), "items": data["articles"]}
 
 
+@router.get("/api/sync/status")
+def sync_status_api():
+    return _sync_progress_payload()
+
+
+@router.post("/api/sync/regulation/start")
+def start_regulation_sync_api():
+    started = _start_regulation_sync_job()
+    payload = _sync_progress_payload()
+    return JSONResponse(payload, status_code=202 if started else 200)
+
+
+@router.post("/api/sync/news/start")
+def start_news_sync_api():
+    started = _start_news_sync_job()
+    payload = _sync_progress_payload()
+    return JSONResponse(payload, status_code=202 if started else 200)
+
+
 @router.get("/regulations/{regulation_id}")
 def regulation_detail(request: Request, regulation_id: int):
     with get_connection() as connection:
@@ -445,15 +540,13 @@ async def update_regulation_review(request: Request, regulation_id: int):
 
 @router.post("/sync")
 def trigger_sync():
-    IngestionService().run(lookback_days=5)
+    _start_regulation_sync_job()
     return RedirectResponse(url="/", status_code=303)
 
 
 @router.post("/news/sync")
 def trigger_news_sync():
-    service = NewsIngestionService()
-    if service.is_configured():
-        service.run(run_type="manual")
+    _start_news_sync_job()
     return RedirectResponse(url="/", status_code=303)
 
 

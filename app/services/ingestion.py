@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Callable
 from zoneinfo import ZoneInfo
 
 from ..config import settings
@@ -17,20 +18,39 @@ class IngestionService:
         self.classifier = RegulationClassifier()
         self.alerts = AlertService()
 
-    def run(self, lookback_days: int = 5) -> dict:
+    def run(
+        self,
+        lookback_days: int = 5,
+        progress_callback: Callable[[int, int, str], None] | None = None,
+    ) -> dict:
         started_at = datetime.now(ZoneInfo(settings.timezone)).isoformat()
         sync_run_id = self._start_sync_run(started_at)
         inserted: list[dict] = []
         collected_count = 0
+        total_steps = 4
         status = "success"
         message = "ok"
 
         try:
+            self._notify_progress(progress_callback, current=0, total=4, message="최근 규제 공고를 불러오는 중입니다.")
             raw_items = self.adapter.fetch_recent_items(lookback_days=lookback_days)
             collected_count = len(raw_items)
-            for item in raw_items:
+            total_steps = max(collected_count, 1) + 3
+            self._notify_progress(
+                progress_callback,
+                current=1,
+                total=total_steps,
+                message=f"규제 공고 {collected_count}건을 확인했습니다.",
+            )
+            for index, item in enumerate(raw_items, start=1):
                 classification = self.classifier.classify(item)
                 if not classification:
+                    self._notify_progress(
+                        progress_callback,
+                        current=index + 1,
+                        total=total_steps,
+                        message=f"규제 {index}/{collected_count}건을 검토하는 중입니다.",
+                    )
                     continue
 
                 enriched = {
@@ -45,7 +65,19 @@ class IngestionService:
                 }
                 if self._upsert_regulation(enriched):
                     inserted.append(enriched)
+                self._notify_progress(
+                    progress_callback,
+                    current=index + 1,
+                    total=total_steps,
+                    message=f"규제 {index}/{collected_count}건을 분류·저장했습니다.",
+                )
 
+            self._notify_progress(
+                progress_callback,
+                current=total_steps - 1,
+                total=total_steps,
+                message="규제 알림 대상을 정리하는 중입니다.",
+            )
             self.alerts.send_for_regulations(inserted)
         except Exception as exc:  # noqa: BLE001
             status = "failed"
@@ -55,12 +87,30 @@ class IngestionService:
             finished_at = datetime.now(ZoneInfo(settings.timezone)).isoformat()
             self._finish_sync_run(sync_run_id, finished_at, status, collected_count, len(inserted), message)
 
+        self._notify_progress(
+            progress_callback,
+            current=total_steps,
+            total=total_steps,
+            message=f"규제 동기화가 완료되었습니다. 신규 {len(inserted)}건을 반영했습니다.",
+        )
         return {
             "started_at": started_at,
             "collected_count": collected_count,
             "inserted_count": len(inserted),
             "inserted": inserted,
         }
+
+    @staticmethod
+    def _notify_progress(
+        callback: Callable[[int, int, str], None] | None,
+        *,
+        current: int,
+        total: int,
+        message: str,
+    ) -> None:
+        if callback is None:
+            return
+        callback(current, total, message)
 
     def _upsert_regulation(self, item: dict) -> bool:
         with get_connection() as connection:

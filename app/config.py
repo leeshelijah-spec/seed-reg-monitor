@@ -95,6 +95,7 @@ class Settings:
     naver_news_timeout: int = int(os.getenv("NAVER_NEWS_TIMEOUT", "15"))
     news_scheduler_hour: int = int(os.getenv("NEWS_SCHEDULER_HOUR", "8"))
     news_scheduler_minute: int = int(os.getenv("NEWS_SCHEDULER_MINUTE", "40"))
+    regulation_sync_lookback_days: int = int(os.getenv("REGULATION_SYNC_LOOKBACK_DAYS", "14"))
     smtp_host: str | None = os.getenv("SMTP_HOST") or None
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
     smtp_username: str | None = os.getenv("SMTP_USERNAME") or None

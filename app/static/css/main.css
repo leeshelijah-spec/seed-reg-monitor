@@ -123,6 +123,12 @@ main {
   filter: brightness(0.98);
 }
 
+.sync-button:disabled {
+  opacity: 0.72;
+  cursor: wait;
+  box-shadow: none;
+}
+
 .sync-button.secondary {
   background: linear-gradient(135deg, #1b4332, #2d6a4f);
 }
@@ -153,6 +159,98 @@ main {
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+}
+
+.sync-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sync-progress-modal {
+  width: min(760px, calc(100vw - 32px));
+  padding: 22px;
+}
+
+.sync-progress-card {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid rgba(0, 152, 75, 0.12);
+  border-radius: 18px;
+  background: rgba(248, 253, 249, 0.92);
+}
+
+.sync-progress-head,
+.sync-progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sync-progress-head strong {
+  color: var(--brand-strong);
+  font-size: 0.96rem;
+}
+
+.sync-progress-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 62px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.sync-progress-state--idle {
+  background: #f1f6f3;
+  color: #5a7363;
+}
+
+.sync-progress-state--running {
+  background: #d9f3e4;
+  color: #0b6b38;
+}
+
+.sync-progress-state--success {
+  background: #d7f5e3;
+  color: #0c6634;
+}
+
+.sync-progress-state--failed {
+  background: #fce9e9;
+  color: #b23a3a;
+}
+
+.sync-progress-bar {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(0, 152, 75, 0.1);
+}
+
+.sync-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--brand), var(--brand-deep));
+  transition: width 180ms ease;
+}
+
+.sync-progress-meta {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.sync-progress-message {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .panel,
@@ -1235,6 +1333,10 @@ textarea.form-control {
 
   .topbar-actions {
     width: 100%;
+  }
+
+  .sync-progress-grid {
+    grid-template-columns: 1fr;
   }
 
   .review-form-footer {

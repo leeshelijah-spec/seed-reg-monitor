@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from typing import Callable
 
 from ..database import get_connection, row_to_news_article
 from .news_feedback_learning import NewsFeedbackLearningService, UNREVIEWED_STATUS
@@ -28,7 +29,12 @@ class NewsIngestionService:
     def is_configured(self) -> bool:
         return self.client.is_configured()
 
-    def run(self, run_type: str = "manual", display: int | None = None) -> dict[str, Any]:
+    def run(
+        self,
+        run_type: str = "manual",
+        display: int | None = None,
+        progress_callback: Callable[[int, int, str], None] | None = None,
+    ) -> dict[str, Any]:
         keywords = self.keyword_service.list_active_keywords()
         summary = {
             "status": "success",
@@ -38,10 +44,33 @@ class NewsIngestionService:
             "duplicate_count": 0,
             "errors": [],
         }
-        for keyword_row in keywords:
+        total_keywords = max(len(keywords), 1)
+        if not keywords:
+            self._notify_progress(
+                progress_callback,
+                current=1,
+                total=1,
+                message="활성 뉴스 키워드가 없어 수집을 종료했습니다.",
+            )
+            return summary
+
+        self._notify_progress(
+            progress_callback,
+            current=0,
+            total=total_keywords,
+            message=f"활성 키워드 {len(keywords)}개를 확인했습니다.",
+        )
+
+        for index, keyword_row in enumerate(keywords, start=1):
             keyword = keyword_row["keyword"]
             started_at = now_iso()
             log_id = self._start_log(keyword, run_type, started_at)
+            self._notify_progress(
+                progress_callback,
+                current=index - 1,
+                total=total_keywords,
+                message=f"[{index}/{total_keywords}] {keyword} 뉴스를 수집하는 중입니다.",
+            )
             try:
                 payload = self.client.search_news(keyword=keyword, display=display)
                 items = payload.get("items", [])
@@ -59,6 +88,12 @@ class NewsIngestionService:
                     http_status=payload.get("_meta", {}).get("http_status"),
                     message="ok",
                 )
+                self._notify_progress(
+                    progress_callback,
+                    current=index,
+                    total=total_keywords,
+                    message=f"[{index}/{total_keywords}] {keyword} 처리 완료",
+                )
             except Exception as exc:  # noqa: BLE001
                 summary["status"] = "partial_failure"
                 summary["errors"].append({"keyword": keyword, "message": str(exc)})
@@ -72,6 +107,26 @@ class NewsIngestionService:
                     http_status=None,
                     message=str(exc),
                 )
+                self._notify_progress(
+                    progress_callback,
+                    current=index,
+                    total=total_keywords,
+                    message=f"[{index}/{total_keywords}] {keyword} 처리 실패: {exc}",
+                )
+
+        final_message = (
+            f"뉴스 수집이 완료되었습니다. 신규 {summary['inserted_count']}건, 중복 {summary['duplicate_count']}건입니다."
+        )
+        if summary["errors"]:
+            final_message = (
+                f"뉴스 수집이 끝났지만 오류 {len(summary['errors'])}건이 있어 확인이 필요합니다."
+            )
+        self._notify_progress(
+            progress_callback,
+            current=total_keywords,
+            total=total_keywords,
+            message=final_message,
+        )
         return summary
 
     def ingest_items(self, keyword: str, items: list[dict[str, Any]]) -> tuple[int, int]:
@@ -289,3 +344,15 @@ class NewsIngestionService:
                     log_id,
                 ),
             )
+
+    @staticmethod
+    def _notify_progress(
+        callback: Callable[[int, int, str], None] | None,
+        *,
+        current: int,
+        total: int,
+        message: str,
+    ) -> None:
+        if callback is None:
+            return
+        callback(current, total, message)

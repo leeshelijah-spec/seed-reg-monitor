@@ -13,6 +13,9 @@ from ..config import settings
 
 
 LAW_BASE_URL = "https://www.law.go.kr"
+LAW_HISTORY_DISPLAY = 500
+ADMIN_RULE_DISPLAY = 100
+FALLBACK_LOOKBACK_DAYS = 30
 SEARCH_KEYWORDS = [
     "종자",
     "종묘",
@@ -119,6 +122,12 @@ class KoreanLawAdapter:
         self.env.setdefault("LAW_OC", self._read_law_oc())
 
     def fetch_recent_items(self, lookback_days: int = 7) -> list[dict[str, Any]]:
+        items = self._collect_recent_items(lookback_days)
+        if items or lookback_days >= FALLBACK_LOOKBACK_DAYS:
+            return items
+        return self._collect_recent_items(max(lookback_days * 2, FALLBACK_LOOKBACK_DAYS))
+
+    def _collect_recent_items(self, lookback_days: int) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         seen_urls: set[str] = set()
 
@@ -141,7 +150,10 @@ class KoreanLawAdapter:
         return items
 
     def _fetch_law_history_for_date(self, target_date: date) -> list[dict[str, Any]]:
-        payload = self._run_fetcher("law_history", {"regDt": target_date.strftime("%Y%m%d"), "display": 200})
+        payload = self._run_fetcher(
+            "law_history",
+            {"regDt": target_date.strftime("%Y%m%d"), "display": LAW_HISTORY_DISPLAY},
+        )
         root = ET.fromstring(payload["raw"])
         results: list[dict[str, Any]] = []
 
@@ -179,7 +191,7 @@ class KoreanLawAdapter:
         seen_seq: set[str] = set()
 
         for keyword in SEARCH_KEYWORDS:
-            payload = self._run_fetcher("search_admin_rule", {"query": keyword, "display": 30})
+            payload = self._run_fetcher("search_admin_rule", {"query": keyword, "display": ADMIN_RULE_DISPLAY})
             root = ET.fromstring(payload["raw"])
             for node in root.findall("admrul"):
                 seq = self._xml_text(node, "행정규칙일련번호")

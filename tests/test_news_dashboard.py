@@ -89,7 +89,7 @@ class NewsDashboardGroupingTest(unittest.TestCase):
             [
                 _article(
                     article_id=10,
-                    title="유럽서도 AI 인체감염...\"가금류·길고양이 접촉 피해야\"",
+                    title='유럽서도 AI 인체감염..."가금류·길고양이 접촉 피해야"',
                     keyword="검역",
                     source_title="news-a.example.com",
                     published_at="2026-04-06T12:00:00+09:00",
@@ -101,7 +101,7 @@ class NewsDashboardGroupingTest(unittest.TestCase):
                 ),
                 _article(
                     article_id=11,
-                    title="질병청 \"유럽서도 AI 인체 감염…가금류·길고양이 접촉 자제해야\"",
+                    title='질병청 "유럽서도 AI 인체 감염…가금류·길고양이 접촉 자제해야"',
                     keyword="검역",
                     source_title="news-b.example.com",
                     published_at="2026-04-06T11:50:00+09:00",

@@ -409,7 +409,7 @@
           </tr>
         </thead>
         <tbody>
-          {% for kroup in news_dashboard.article_groups %}
+          {% for group in news_dashboard.article_groups %}
           <tr>
             {% set article = group.representative %}
             <td data-filter-values="{{ group.title_filter_values|join('||') }}">
