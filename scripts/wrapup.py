@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 README_PATH = BASE_DIR / "README.md"
+README_KO_PATH = BASE_DIR / "README.ko.md"
 FEATURE_UPDATE_DIR = BASE_DIR / "docs" / "feature-updates"
 TIMEZONE = ZoneInfo("Asia/Seoul")
 
@@ -79,14 +80,13 @@ def append_feature_update(target_date: str, title: str, changes: list[str]) -> N
         handle.write("\n".join(lines))
 
 
-def update_readme_latest(target_date: str, changes: list[str]) -> None:
-    content = README_PATH.read_text(encoding="utf-8")
+def replace_section(content: str, heading: str, new_lines: list[str]) -> str:
     lines = content.splitlines()
 
     start_index = None
     end_index = None
     for index, line in enumerate(lines):
-        if line.strip() == "## Latest Update":
+        if line.strip() == heading:
             start_index = index
             continue
         if start_index is not None and index > start_index and line.startswith("## "):
@@ -94,10 +94,15 @@ def update_readme_latest(target_date: str, changes: list[str]) -> None:
             break
 
     if start_index is None:
-        raise RuntimeError("README.md does not contain a '## Latest Update' section.")
+        raise RuntimeError(f"README section '{heading}' was not found.")
     if end_index is None:
         end_index = len(lines)
 
+    merged = lines[:start_index] + new_lines + lines[end_index:]
+    return "\n".join(merged) + "\n"
+
+
+def update_readme_latest(target_date: str, changes: list[str]) -> None:
     latest_lines = [
         "## Latest Update",
         "",
@@ -105,9 +110,20 @@ def update_readme_latest(target_date: str, changes: list[str]) -> None:
     ]
     latest_lines.extend(f"- {change}" for change in changes[:5])
     latest_lines.append("")
+    updated = replace_section(README_PATH.read_text(encoding="utf-8"), "## Latest Update", latest_lines)
+    README_PATH.write_text(updated, encoding="utf-8")
 
-    new_lines = lines[:start_index] + latest_lines + lines[end_index:]
-    README_PATH.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+
+def update_readme_ko_latest(target_date: str, changes: list[str]) -> None:
+    latest_lines = [
+        "## 최신 업데이트",
+        "",
+        f"- 최신 업데이트: [{target_date}](docs/feature-updates/{target_date}.md)",
+    ]
+    latest_lines.extend(f"- {change}" for change in changes[:5])
+    latest_lines.append("")
+    updated = replace_section(README_KO_PATH.read_text(encoding="utf-8"), "## 최신 업데이트", latest_lines)
+    README_KO_PATH.write_text(updated, encoding="utf-8")
 
 
 def run_git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -152,6 +168,7 @@ def main() -> int:
 
     append_feature_update(target_date, title, changes)
     update_readme_latest(target_date, changes)
+    update_readme_ko_latest(target_date, changes)
     stage_all()
 
     if not has_staged_changes():

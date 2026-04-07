@@ -181,7 +181,7 @@ Run tests:
 
 ## Wrap-up Workflow
 
-Use the wrap-up command when you want to finish a work session by updating the dated changelog, refreshing the README latest-update section, and creating a commit in one flow.
+Use the wrap-up command when you want to finish a work session by updating the dated changelog, refreshing both README latest-update sections, and creating a commit in one flow.
 
 Git Bash:
 
@@ -205,6 +205,7 @@ After the prompts complete, it:
 
 - Appends the entry to `docs/feature-updates/YYYY-MM-DD.md`
 - Refreshes the `Latest Update` section in `README.md`
+- Refreshes the `최신 업데이트` section in `README.ko.md`
 - Runs `git add -A`
 - Creates a commit
 
