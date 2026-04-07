@@ -1,6 +1,6 @@
 # Seed Regulation Monitor
 
-[한국어 README 보기](README.ko.md)
+[Korean README](README.ko.md)
 
 Seed Regulation Monitor is a FastAPI dashboard for monitoring seed-industry regulations and Naver-news-based industry trends in one place.
 
@@ -18,8 +18,8 @@ Seed Regulation Monitor is a FastAPI dashboard for monitoring seed-industry regu
 - Collect, deduplicate, and analyze Naver news for seed-industry trends
 - Capture article feedback, keyword management, and collection logs
 - Filter unreviewed regulation/article tables by column with checkbox-driven pick lists
-- Open news operations status from a topbar modal while keeping analysis panels focused
-- Track updates through dated feature updates
+- Open sync status from a topbar popup while keeping analysis panels focused
+- Track updates through dated feature updates and a wrap-up command
 
 ## Stack
 
@@ -47,11 +47,12 @@ tests/
 
 ## Latest Update
 
-- Latest update: [2026-04-06](docs/feature-updates/2026-04-06.md)
-- Removed the read-only/ngrok sharing flow and returned the app to a single editable dashboard mode
-- Simplified templates and request handling by dropping read-only write-blocking branches
-- Reworked the startup Python resolver to recreate `.venv` from a launchable base Python when needed
-- Kept the one-time post-start sync, KPI tooltips, operations modal, and per-column review-table filters
+- Latest update: [2026-04-07](docs/feature-updates/2026-04-07.md)
+- Switched the recommended local launcher from PowerShell to Git Bash via `start_dashboard.sh` and `start_dashboard.cmd`
+- Moved regulation/news sync status into an on-demand popup and added a startup progress gauge
+- Added startup sync throttling so regulation skips within 24 hours and news skips within 3 hours
+- Expanded regulation collection lookback and added sports-news noise filtering in news analysis
+- Added a `wrapup` workflow to refresh the dated update log, sync this README section, and create a commit in one step
 
 ## Quick Start
 
@@ -118,19 +119,23 @@ If you want alert delivery, create `config/alert-recipients.json` from `config/a
 
 ### 4. Run the app
 
-Windows:
+Preferred local launcher on Windows and Git Bash:
 
 ```bash
-.venv\Scripts\python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+./start_dashboard.sh
 ```
 
-macOS / Linux:
+Windows users can also launch:
 
 ```bash
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+start_dashboard.cmd
 ```
 
-If you are not in an activated virtual environment, prefer `.venv\Scripts\python -m uvicorn ...` instead of relying on a global `uvicorn` command.
+Direct `uvicorn` remains available when you want to bypass the launcher:
+
+```bash
+.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
+```
 
 - Dashboard: [http://127.0.0.1:8010/](http://127.0.0.1:8010/)
 - Health check: [http://127.0.0.1:8010/health](http://127.0.0.1:8010/health)
@@ -139,24 +144,20 @@ If you are not in an activated virtual environment, prefer `.venv\Scripts\python
 
 Use the launcher below to run the dashboard with sync, review, keyword, and feedback actions enabled.
 
-1. Start the dashboard:
+1. Start the dashboard from Git Bash:
 
 ```bash
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_dashboard.ps1
+./start_dashboard.sh
 ```
 
-Windows users can also double-click `start_dashboard.cmd` from the repository root.
+Windows users can also run `start_dashboard.cmd` from the repository root.
 
-If `.venv` is missing or broken, the launcher now tries to recreate it from a launchable base Python and reinstall `requirements.txt` automatically before starting the app.
+If `.venv` is missing or broken, the launcher tries to recreate it from a launchable base Python and reinstall `requirements.txt` automatically before starting the app.
 
-If PowerShell still cannot find Python after a reinstall, set `PYTHON_EXE` explicitly for the launch session:
+When startup finishes, the launcher checks recent sync history before running `app.manual_sync`.
 
-```powershell
-$env:PYTHON_EXE = "C:\Path\To\python.exe"
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_dashboard.ps1
-```
-
-When startup finishes, the launcher also runs one one-time `app.manual_sync` pass so regulation sync and Naver-news collection each execute once right after `Application startup complete`.
+- Regulation startup sync is skipped when a success was recorded within the last 24 hours.
+- News startup sync is skipped when a success was recorded within the last 3 hours.
 
 ## Manual Sync
 
@@ -177,6 +178,35 @@ Run tests:
 ```bash
 .venv\Scripts\python -m unittest discover -s tests
 ```
+
+## Wrap-up Workflow
+
+Use the wrap-up command when you want to finish a work session by updating the dated changelog, refreshing the README latest-update section, and creating a commit in one flow.
+
+Git Bash:
+
+```bash
+./wrapup.sh
+```
+
+Windows CMD:
+
+```bash
+wrapup.cmd
+```
+
+The command prompts for:
+
+- A short update title
+- One or more change bullets
+- A commit message
+
+After the prompts complete, it:
+
+- Appends the entry to `docs/feature-updates/YYYY-MM-DD.md`
+- Refreshes the `Latest Update` section in `README.md`
+- Runs `git add -A`
+- Creates a commit
 
 ## News Module Layout
 
