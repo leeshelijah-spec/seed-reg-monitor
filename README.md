@@ -19,7 +19,6 @@ Seed Regulation Monitor is a FastAPI dashboard for monitoring seed-industry regu
 - Capture article feedback, keyword management, and collection logs
 - Filter unreviewed regulation/article tables by column with checkbox-driven pick lists
 - Open sync status from a topbar popup while keeping analysis panels focused
-- Track updates through dated feature updates and a wrap-up command
 
 ## Stack
 
@@ -176,36 +175,6 @@ Run tests:
 ```bash
 .venv\Scripts\python -m unittest discover -s tests
 ```
-
-## Wrap-up Workflow
-
-Use the wrap-up command when you want to finish a work session by updating the dated changelog, refreshing both README latest-update sections, and creating a commit in one flow.
-
-Git Bash:
-
-```bash
-./wrapup.sh
-```
-
-Windows CMD:
-
-```bash
-wrapup.cmd
-```
-
-The command prompts for:
-
-- A short update title
-- One or more change bullets
-- A commit message
-
-After the prompts complete, it:
-
-- Appends the entry to `docs/feature-updates/YYYY-MM-DD.md`
-- Refreshes the `Latest Update` section in `README.md`
-- Refreshes the `최신 업데이트` section in `README.ko.md`
-- Runs `git add -A`
-- Creates a commit
 
 ## News Module Layout
 
