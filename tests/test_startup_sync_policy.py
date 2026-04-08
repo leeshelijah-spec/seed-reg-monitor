@@ -14,6 +14,8 @@ from app.services.startup_sync_policy import StartupSyncPolicyService
 class StartupSyncPolicyServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.original_db_path = settings.db_path
+        self.original_regulation_hours = settings.regulation_startup_sync_hours
+        self.original_news_hours = settings.news_startup_sync_hours
         self.temp_root = Path("C:/PJT/seed-reg-monitor/tests/.tmp/startup-sync-policy")
         self.temp_root.mkdir(parents=True, exist_ok=True)
         self.temp_db_path = self.temp_root / "test.db"
@@ -58,10 +60,13 @@ class StartupSyncPolicyServiceTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         object.__setattr__(settings, "db_path", self.original_db_path)
+        object.__setattr__(settings, "regulation_startup_sync_hours", self.original_regulation_hours)
+        object.__setattr__(settings, "news_startup_sync_hours", self.original_news_hours)
         shutil.rmtree(self.temp_root, ignore_errors=True)
 
     def test_regulation_sync_is_skipped_when_recent_success_exists(self) -> None:
-        recent = (datetime.now(ZoneInfo(settings.timezone)) - timedelta(hours=12)).isoformat()
+        object.__setattr__(settings, "regulation_startup_sync_hours", 12)
+        recent = (datetime.now(ZoneInfo(settings.timezone)) - timedelta(hours=6)).isoformat()
         connection = sqlite3.connect(self.temp_db_path)
         connection.execute(
             "INSERT INTO sync_runs (started_at, finished_at, status) VALUES (?, ?, 'success')",
@@ -73,10 +78,11 @@ class StartupSyncPolicyServiceTest(unittest.TestCase):
         decision = StartupSyncPolicyService().should_run_regulation_sync()
 
         self.assertFalse(decision.should_run)
-        self.assertIn("24시간", decision.message)
+        self.assertIn("12시간", decision.message)
 
     def test_regulation_sync_runs_when_last_success_is_old(self) -> None:
-        older = (datetime.now(ZoneInfo(settings.timezone)) - timedelta(days=2)).isoformat()
+        object.__setattr__(settings, "regulation_startup_sync_hours", 12)
+        older = (datetime.now(ZoneInfo(settings.timezone)) - timedelta(hours=13)).isoformat()
         connection = sqlite3.connect(self.temp_db_path)
         connection.execute(
             "INSERT INTO sync_runs (started_at, finished_at, status) VALUES (?, ?, 'success')",
@@ -90,6 +96,7 @@ class StartupSyncPolicyServiceTest(unittest.TestCase):
         self.assertTrue(decision.should_run)
 
     def test_news_sync_is_skipped_when_recent_success_exists(self) -> None:
+        object.__setattr__(settings, "news_startup_sync_hours", 3)
         recent = (datetime.now(ZoneInfo(settings.timezone)) - timedelta(hours=2)).isoformat()
         connection = sqlite3.connect(self.temp_db_path)
         connection.execute(
@@ -105,6 +112,7 @@ class StartupSyncPolicyServiceTest(unittest.TestCase):
         self.assertIn("3시간", decision.message)
 
     def test_news_sync_runs_when_no_recent_success_exists(self) -> None:
+        object.__setattr__(settings, "news_startup_sync_hours", 3)
         older = (datetime.now(ZoneInfo(settings.timezone)) - timedelta(hours=5)).isoformat()
         connection = sqlite3.connect(self.temp_db_path)
         connection.execute(

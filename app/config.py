@@ -96,6 +96,8 @@ class Settings:
     news_scheduler_hour: int = int(os.getenv("NEWS_SCHEDULER_HOUR", "8"))
     news_scheduler_minute: int = int(os.getenv("NEWS_SCHEDULER_MINUTE", "40"))
     regulation_sync_lookback_days: int = int(os.getenv("REGULATION_SYNC_LOOKBACK_DAYS", "14"))
+    regulation_startup_sync_hours: int = int(os.getenv("REGULATION_STARTUP_SYNC_HOURS", "12"))
+    news_startup_sync_hours: int = int(os.getenv("NEWS_STARTUP_SYNC_HOURS", "3"))
     smtp_host: str | None = os.getenv("SMTP_HOST") or None
     smtp_port: int = int(os.getenv("SMTP_PORT", "587"))
     smtp_username: str | None = os.getenv("SMTP_USERNAME") or None

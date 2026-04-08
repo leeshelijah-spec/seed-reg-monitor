@@ -47,12 +47,10 @@ tests/
 
 ## Latest Update
 
-- Latest update: [2026-04-07](docs/feature-updates/2026-04-07.md)
-- Switched the recommended local launcher from PowerShell to Git Bash via `start_dashboard.sh` and `start_dashboard.cmd`
-- Moved regulation/news sync status into an on-demand popup and added a startup progress gauge
-- Added startup sync throttling so regulation skips within 24 hours and news skips within 3 hours
-- Expanded regulation collection lookback and added sports-news noise filtering in news analysis
-- Added a `wrapup` workflow to refresh the dated update log, sync this README section, and create a commit in one step
+- Latest update: [2026-04-08](docs/feature-updates/2026-04-08.md)
+- Adjusted the regulation startup sync skip window from 24 hours to 12 hours.
+- Moved startup sync intervals to settings-backed hour values for easier tuning.
+- Updated startup sync tests and README guidance to match the 12-hour regulation window.
 
 ## Quick Start
 
@@ -156,7 +154,7 @@ If `.venv` is missing or broken, the launcher tries to recreate it from a launch
 
 When startup finishes, the launcher checks recent sync history before running `app.manual_sync`.
 
-- Regulation startup sync is skipped when a success was recorded within the last 24 hours.
+- Regulation startup sync is skipped when a success was recorded within the last 12 hours.
 - News startup sync is skipped when a success was recorded within the last 3 hours.
 
 ## Manual Sync
