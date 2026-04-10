@@ -47,11 +47,11 @@ tests/
 ## 최신 업데이트
 
 - 최신 업데이트: [2026-04-10](docs/feature-updates/2026-04-10.md)
-- Expanded feedback reuse to prioritize original/naver link matches before keyword+title exact match.
-- Added /refinelogic workflow service to apply today's noise decisions to today's collected articles, run one news sync, and re-apply.
-- Added terminal launchers (refinelogic.cmd/.sh) and a PowerShell profile registrar for direct /refinelogic command usage.
-- Added regression coverage for link-based feedback reuse and refinelogic noise propagation.
-- Aligned wrapup tooling wording from changelog naming to feature-update naming in scripts and skill guidance.
+- 피드백 재사용 시 `키워드+제목` 완전일치보다 `original/naver 링크` 일치를 우선 적용하도록 확장했습니다.
+- `/refinelogic` 워크플로우 서비스를 추가해 오늘 잡음 판정을 오늘 수집 기사에 반영하고, 뉴스 동기화 1회 후 다시 반영하도록 했습니다.
+- `refinelogic.cmd/.sh` 실행기와 PowerShell 프로필 등록 스크립트를 추가해 `/refinelogic` 명령을 바로 사용할 수 있게 했습니다.
+- 링크 기반 피드백 재사용과 refinelogic 잡음 전파에 대한 회귀 테스트를 추가했습니다.
+- wrapup 관련 스크립트/스킬 문구를 `changelog` 기준에서 `feature-update` 기준으로 정렬했습니다.
 
 ## 빠른 시작
 
