@@ -46,10 +46,12 @@ tests/
 
 ## Latest Update
 
-- Latest update: [2026-04-08](docs/feature-updates/2026-04-08.md)
-- Adjusted the regulation startup sync skip window from 24 hours to 12 hours.
-- Moved startup sync intervals to settings-backed hour values for easier tuning.
-- Updated startup sync tests and README guidance to match the 12-hour regulation window.
+- Latest update: [2026-04-10](docs/feature-updates/2026-04-10.md)
+- Expanded feedback reuse to prioritize original/naver link matches before keyword+title exact match.
+- Added /refinelogic workflow service to apply today's noise decisions to today's collected articles, run one news sync, and re-apply.
+- Added terminal launchers (refinelogic.cmd/.sh) and a PowerShell profile registrar for direct /refinelogic command usage.
+- Added regression coverage for link-based feedback reuse and refinelogic noise propagation.
+- Aligned wrapup tooling wording from changelog naming to feature-update naming in scripts and skill guidance.
 
 ## Quick Start
 
@@ -168,6 +170,18 @@ Load sample news data:
 
 ```bash
 .venv\Scripts\python scripts/seed_sample_news.py
+```
+
+Run `/refinelogic` workflow (apply today's noise feedback to today's collected articles, then run one news sync):
+
+```bash
+refinelogic.cmd
+```
+
+If you want to type `/refinelogic` directly in PowerShell, register it once:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\register_refinelogic_command.ps1
 ```
 
 Run tests:

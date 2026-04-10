@@ -41,8 +41,17 @@ class FeedbackReuseResult:
 
 
 class NewsFeedbackLearningService:
-    def reuse_feedback(self, *, keyword: str, title: str) -> FeedbackReuseResult:
-        if not keyword or not title:
+    def reuse_feedback(
+        self,
+        *,
+        keyword: str,
+        title: str,
+        original_link: str | None = None,
+        naver_link: str | None = None,
+    ) -> FeedbackReuseResult:
+        normalized_original_link = (original_link or "").strip()
+        normalized_naver_link = (naver_link or "").strip()
+        if not title and not normalized_original_link and not normalized_naver_link:
             return FeedbackReuseResult(
                 review_status=None,
                 impact_level=None,
@@ -67,14 +76,43 @@ class NewsFeedbackLearningService:
                     nf.impact_level,
                     nf.urgency_level,
                     nf.comment,
-                    nf.created_at
+                    nf.created_at,
+                    na.keyword,
+                    na.title,
+                    na.original_link,
+                    na.naver_link
                 FROM news_feedback nf
                 JOIN news_articles na ON na.id = nf.article_id
-                WHERE na.keyword = ?
-                  AND na.title = ?
-                ORDER BY nf.created_at DESC, nf.id DESC
+                WHERE (
+                        (? != '' AND (na.original_link = ? OR na.naver_link = ?))
+                     OR (? != '' AND (na.original_link = ? OR na.naver_link = ?))
+                     OR (na.keyword = ? AND na.title = ?)
+                )
+                ORDER BY
+                    CASE WHEN (? != '' AND (na.original_link = ? OR na.naver_link = ?)) THEN 0 ELSE 1 END,
+                    CASE WHEN (? != '' AND (na.original_link = ? OR na.naver_link = ?)) THEN 0 ELSE 1 END,
+                    CASE WHEN na.keyword = ? AND na.title = ? THEN 0 ELSE 1 END,
+                    nf.created_at DESC,
+                    nf.id DESC
                 """,
-                (keyword, title),
+                (
+                    normalized_original_link,
+                    normalized_original_link,
+                    normalized_original_link,
+                    normalized_naver_link,
+                    normalized_naver_link,
+                    normalized_naver_link,
+                    keyword,
+                    title,
+                    normalized_original_link,
+                    normalized_original_link,
+                    normalized_original_link,
+                    normalized_naver_link,
+                    normalized_naver_link,
+                    normalized_naver_link,
+                    keyword,
+                    title,
+                ),
             ).fetchall()
 
         if not rows:
@@ -120,8 +158,20 @@ class NewsFeedbackLearningService:
             conflict=len(distinct_types) > 1,
         )
 
-    def reuse_review_status(self, *, keyword: str, title: str) -> FeedbackReuseResult:
-        return self.reuse_feedback(keyword=keyword, title=title)
+    def reuse_review_status(
+        self,
+        *,
+        keyword: str,
+        title: str,
+        original_link: str | None = None,
+        naver_link: str | None = None,
+    ) -> FeedbackReuseResult:
+        return self.reuse_feedback(
+            keyword=keyword,
+            title=title,
+            original_link=original_link,
+            naver_link=naver_link,
+        )
 
     def _derive_review_status(self, *, is_relevant: bool, is_noise: bool, feedback_type: str | None) -> str | None:
         if is_noise:

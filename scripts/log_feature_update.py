@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-CHANGELOG_DIR = BASE_DIR / "docs" / "feature-updates"
+FEATURE_UPDATE_DIR = BASE_DIR / "docs" / "feature-updates"
 TIMEZONE = ZoneInfo("Asia/Seoul")
 
 
@@ -50,7 +50,7 @@ def main() -> None:
     args = parse_args()
     target_date = resolve_date(args.date)
     now = datetime.now(TIMEZONE)
-    target_path = CHANGELOG_DIR / f"{target_date}.md"
+    target_path = FEATURE_UPDATE_DIR / f"{target_date}.md"
 
     ensure_header(target_path, target_date)
     with target_path.open("a", encoding="utf-8") as file:

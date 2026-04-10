@@ -152,7 +152,12 @@ class NewsIngestionService:
             {"title": title, "summary": summary, "published_at": published_at},
             matched_keywords=matched_keywords,
         )
-        feedback_reuse = self.feedback_learning.reuse_feedback(keyword=keyword, title=title)
+        feedback_reuse = self.feedback_learning.reuse_feedback(
+            keyword=keyword,
+            title=title,
+            original_link=original_link,
+            naver_link=naver_link,
+        )
         impact_level = feedback_reuse.impact_level or analysis.business_impact_level
         urgency_level = feedback_reuse.urgency_level or analysis.urgency_level
         review_status = feedback_reuse.review_status or analysis.review_status

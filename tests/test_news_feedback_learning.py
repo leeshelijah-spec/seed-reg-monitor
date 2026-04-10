@@ -19,6 +19,8 @@ def _build_connection() -> sqlite3.Connection:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             keyword TEXT NOT NULL,
             title TEXT NOT NULL,
+            original_link TEXT NOT NULL DEFAULT '',
+            naver_link TEXT NOT NULL DEFAULT '',
             review_status TEXT NOT NULL DEFAULT '미검토'
         );
 
@@ -51,8 +53,17 @@ class NewsFeedbackLearningServiceTest(unittest.TestCase):
     def test_reuses_latest_structured_feedback(self) -> None:
         connection = _build_connection()
         connection.execute(
-            "INSERT INTO news_articles (id, keyword, title, review_status) VALUES (1, ?, ?, ?)",
-            ("토마토", "뉴스 토마토, 멤버십 가입 지시 논란", "잡음"),
+            """
+            INSERT INTO news_articles (id, keyword, title, original_link, naver_link, review_status)
+            VALUES (1, ?, ?, ?, ?, ?)
+            """,
+            (
+                "토마토",
+                "뉴스 토마토, 멤버십 가입 지시 논란",
+                "https://example.com/article",
+                "https://search.naver.com/article",
+                "잡음",
+            ),
         )
         connection.execute(
             """
@@ -73,6 +84,44 @@ class NewsFeedbackLearningServiceTest(unittest.TestCase):
         self.assertEqual(result.comment, "주간 보고 반영")
         self.assertTrue(result.is_relevant)
         self.assertFalse(result.is_noise)
+        self.assertEqual(result.match_count, 1)
+
+    def test_reuses_feedback_by_link_even_when_keyword_or_title_changes(self) -> None:
+        connection = _build_connection()
+        connection.execute(
+            """
+            INSERT INTO news_articles (id, keyword, title, original_link, naver_link, review_status)
+            VALUES (1, ?, ?, ?, ?, ?)
+            """,
+            (
+                "토마토",
+                "뉴스 토마토, 멤버십 가입 지시 논란",
+                "https://example.com/article?id=100",
+                "https://search.naver.com/article?id=100",
+                "잡음",
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO news_feedback (
+                article_id, feedback_type, is_relevant, is_noise, impact_level, urgency_level, comment, created_at
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("잡음", 0, 1, None, None, "스포츠성 기사", "2026-04-06T12:05:00+09:00"),
+        )
+
+        service = NewsFeedbackLearningService()
+        with patch("app.services.news_feedback_learning.get_connection", lambda: _shared_connection(connection)):
+            result = service.reuse_feedback(
+                keyword="오이",
+                title="제목이 조금 바뀐 기사",
+                original_link="https://example.com/article?id=100",
+                naver_link="https://search.naver.com/article?id=100",
+            )
+
+        self.assertEqual(result.review_status, "잡음")
+        self.assertTrue(result.is_noise)
+        self.assertEqual(result.comment, "스포츠성 기사")
         self.assertEqual(result.match_count, 1)
 
     def test_returns_none_when_no_feedback_exists(self) -> None:
@@ -105,7 +154,14 @@ class NewsIngestionFeedbackIntegrationTest(unittest.TestCase):
                 )
 
         class StubFeedbackLearning:
-            def reuse_feedback(self, *, keyword: str, title: str):
+            def reuse_feedback(
+                self,
+                *,
+                keyword: str,
+                title: str,
+                original_link: str | None = None,
+                naver_link: str | None = None,
+            ):
                 class Result:
                     review_status = "관련"
                     impact_level = "중요"
